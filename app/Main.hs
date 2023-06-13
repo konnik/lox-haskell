@@ -13,8 +13,7 @@ main = do
 
 runPrompt :: IO ()
 runPrompt = do
-    putStr "> "
-    hFlush stdout
+    putStr "hlox> " >> hFlush stdout
     input <- getLine
     case input of
         "" -> runPrompt
@@ -29,4 +28,6 @@ runFile fileName = do
 
 run :: String -> IO ()
 run input = do
-    putStrLn "TODO implement run"
+    putStrLn "TODO: implement run"
+    putStrLn "Input: "
+    putStrLn input
