@@ -1,6 +1,7 @@
 module Main where
 
 import System.Environment (getArgs)
+import System.IO (hFlush, stdin, stdout)
 
 main :: IO ()
 main = do
@@ -12,7 +13,14 @@ main = do
 
 runPrompt :: IO ()
 runPrompt = do
-    putStrLn "repl not implemented!!!"
+    putStr "> "
+    hFlush stdout
+    input <- getLine
+    case input of
+        "" -> runPrompt
+        _ -> do
+            run input
+            runPrompt
 
 runFile :: String -> IO ()
 runFile fileName = do
