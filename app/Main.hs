@@ -1,4 +1,6 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE NoFieldSelectors #-}
 
 module Main where
 
@@ -6,6 +8,7 @@ import Data.List (intercalate, intersperse)
 import System.Environment (getArgs)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 import System.IO (hFlush, hPutStrLn, stderr, stdin, stdout)
+import Token
 
 main :: IO ()
 main = do
@@ -39,14 +42,9 @@ run onError source = do
             reportError err
             onError
 
-data Token
-    = TokenA
-    | TokenB
-    deriving (Show)
-
 scanTokens :: String -> Result [Token]
 scanTokens source =
-    okResult [TokenA, TokenB]
+    okResult [Token{type_ = COMMA, lexeme = ",", literal = (), line = 42}]
 
 data Error = Error
     { line :: Int
