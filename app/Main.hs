@@ -1,5 +1,6 @@
 module Main where
 
+import Data.List (intercalate, intersperse)
 import System.Environment (getArgs)
 import System.IO (hFlush, stdin, stdout)
 
@@ -27,7 +28,13 @@ runFile fileName = do
     run fileContent
 
 run :: String -> IO ()
-run input = do
-    putStrLn "TODO: implement run"
-    putStrLn "Input: "
-    putStrLn input
+run source = do
+    putStrLn $ "Tokens: " <> mconcat (intersperse ", " (fmap show tokens))
+  where
+    tokens = scanTokens source
+
+data Token = TokenA | TokenB deriving (Show)
+
+scanTokens :: String -> [Token]
+scanTokens source =
+    [TokenA, TokenB]
