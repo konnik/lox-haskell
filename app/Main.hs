@@ -1,8 +1,11 @@
+{-# LANGUAGE OverloadedRecordDot #-}
+
 module Main where
 
 import Data.List (intercalate, intersperse)
 import System.Environment (getArgs)
-import System.IO (hFlush, stdin, stdout)
+import System.Exit (ExitCode (ExitFailure), exitWith)
+import System.IO (hFlush, hPutStrLn, stderr, stdin, stdout)
 
 main :: IO ()
 main = do
@@ -19,22 +22,47 @@ runPrompt = do
     case input of
         "" -> runPrompt
         _ -> do
-            run input
+            run (pure ()) input
             runPrompt
 
 runFile :: String -> IO ()
 runFile fileName = do
     fileContent <- readFile fileName
-    run fileContent
+    run (exitWith $ ExitFailure 65) fileContent
 
-run :: String -> IO ()
-run source = do
-    putStrLn $ "Tokens: " <> mconcat (intersperse ", " (fmap show tokens))
-  where
-    tokens = scanTokens source
+run :: IO () -> String -> IO ()
+run onError source = do
+    case scanTokens source of
+        Right tokens -> do
+            putStrLn $ "Tokens: " <> mconcat (intersperse ", " (fmap show tokens))
+        Left err -> do
+            reportError err
+            onError
 
-data Token = TokenA | TokenB deriving (Show)
+data Token
+    = TokenA
+    | TokenB
+    deriving (Show)
 
-scanTokens :: String -> [Token]
+scanTokens :: String -> Result [Token]
 scanTokens source =
-    [TokenA, TokenB]
+    okResult [TokenA, TokenB]
+
+data Error = Error
+    { line :: Int
+    , where_ :: String
+    , message :: String
+    }
+type Result a = Either Error a
+
+okResult :: a -> Result a
+okResult value = Right value
+
+errorResult :: Int -> String -> Result a
+errorResult line message = Left $ Error line "" message
+
+reportError :: Error -> IO ()
+reportError err =
+    hPutStrLn stderr errorMessage
+  where
+    errorMessage = mconcat ["[line ", show err.line, "] Error", err.where_, ": ", err.message]
