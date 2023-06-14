@@ -45,15 +45,11 @@ nextToken s =
         '<' : _ -> emit LESS 1
         '>' : '=' : _ -> emit GREATER_EQUAL 2
         '>' : _ -> emit GREATER 1
-        '\r' : '\n' : _ -> nextToken $ skipWindowsNewLine
         '\n' : _ -> nextToken $ skipLinuxNewLine
         ' ' : _ -> nextToken $ skipWs
         '\t' : _ -> nextToken $ skipWs
         x : _ -> errorResult s.line ("Unexpected character: " ++ show x)
   where
-    skipWindowsNewLine :: Scanner
-    skipWindowsNewLine = s{source = drop 2 s.source, line = s.line + 1}
-
     skipLinuxNewLine :: Scanner
     skipLinuxNewLine = s{source = drop 1 s.source, line = s.line + 1}
 
