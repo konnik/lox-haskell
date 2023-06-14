@@ -45,8 +45,10 @@ nextToken s =
         '<' : _ -> emit LESS 1
         '>' : '=' : _ -> emit GREATER_EQUAL 2
         '>' : _ -> emit GREATER 1
+        -- TODO comments
         '\n' : _ -> nextToken $ skipLinuxNewLine
         ' ' : _ -> nextToken $ skipWs
+        '\r' : _ -> nextToken $ skipWs
         '\t' : _ -> nextToken $ skipWs
         x : _ -> errorResult s.line ("Unexpected character: " ++ show x)
   where
