@@ -23,11 +23,8 @@ runPrompt :: IO ()
 runPrompt = do
     putStr "hlox> " >> hFlush stdout
     input <- getLine
-    case input of
-        "" -> runPrompt
-        _ -> do
-            run (pure ()) input
-            runPrompt
+    run (pure ()) input
+    runPrompt
 
 runFile :: String -> IO ()
 runFile fileName = do

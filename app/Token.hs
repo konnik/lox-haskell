@@ -52,4 +52,4 @@ data TokenType
     | VAR
     | WHILE
     | EOF
-    deriving (Show)
+    deriving (Show, Eq)

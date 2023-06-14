@@ -14,16 +14,18 @@ scanTokens source =
 scanTokens' :: Scanner -> Result [Token]
 scanTokens' s =
     case nextToken s of
-        Right (Nothing, _) -> okResult []
-        Right (Just t, s') -> fmap ((:) t) $ scanTokens' s'
+        Right (t, s') ->
+            if t.type_ == EOF
+                then okResult [t]
+                else fmap ((:) t) $ scanTokens' s'
         Left err -> Left err
 
 data Scanner = Scanner {source :: String, line :: Int}
 
-nextToken :: Scanner -> Result (Maybe Token, Scanner)
+nextToken :: Scanner -> Result (Token, Scanner)
 nextToken s =
     case s.source of
-        "" -> endOfFile
+        "" -> emit EOF 0
         '(' : _ -> emit LEFT_PAREN 1
         ')' : _ -> emit RIGHT_PAREN 1
         '{' : _ -> emit LEFT_BRACE 1
@@ -41,9 +43,6 @@ nextToken s =
         '\t' : _ -> nextToken $ skipWs
         x : _ -> errorResult s.line ("Ogiltig token: " ++ show x)
   where
-    endOfFile :: Result (Maybe Token, Scanner)
-    endOfFile = okResult (Nothing, s)
-
     skipWindowsNewLine :: Scanner
     skipWindowsNewLine = s{source = drop 2 s.source, line = s.line + 1}
 
@@ -53,15 +52,14 @@ nextToken s =
     skipWs :: Scanner
     skipWs = s{source = drop 1 s.source}
 
-    emit :: TokenType -> Int -> Result (Maybe Token, Scanner)
+    emit :: TokenType -> Int -> Result (Token, Scanner)
     emit toktyp n =
         okResult
-            ( Just $
-                Token
-                    { type_ = toktyp
-                    , lexeme = take n s.source
-                    , literal = ()
-                    , line = s.line
-                    }
+            ( Token
+                { type_ = toktyp
+                , lexeme = take n s.source
+                , literal = ()
+                , line = s.line
+                }
             , s{source = drop n s.source}
             )
