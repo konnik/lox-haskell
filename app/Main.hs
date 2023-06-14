@@ -5,6 +5,8 @@
 module Main where
 
 import Data.List (intercalate, intersperse)
+import Result
+import Scanner
 import System.Environment (getArgs)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 import System.IO (hFlush, hPutStrLn, stderr, stdin, stdout)
@@ -41,23 +43,6 @@ run onError source = do
         Left err -> do
             reportError err
             onError
-
-scanTokens :: String -> Result [Token]
-scanTokens source =
-    okResult [Token{type_ = COMMA, lexeme = ",", literal = (), line = 42}]
-
-data Error = Error
-    { line :: Int
-    , where_ :: String
-    , message :: String
-    }
-type Result a = Either Error a
-
-okResult :: a -> Result a
-okResult value = Right value
-
-errorResult :: Int -> String -> Result a
-errorResult line message = Left $ Error line "" message
 
 reportError :: Error -> IO ()
 reportError err =

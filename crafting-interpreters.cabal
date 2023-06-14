@@ -23,7 +23,10 @@ maintainer:    niklas.konstenius@gmail.com
 
 executable hlox
   main-is:          Main.hs
-  other-modules:    Token
+  other-modules:
+    Result
+    Scanner
+    Token
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
