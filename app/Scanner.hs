@@ -41,7 +41,7 @@ nextToken s =
         '\n' : _ -> nextToken $ skipLinuxNewLine
         ' ' : _ -> nextToken $ skipWs
         '\t' : _ -> nextToken $ skipWs
-        x : _ -> errorResult s.line ("Ogiltig token: " ++ show x)
+        x : _ -> errorResult s.line ("Unexpected character: " ++ show x)
   where
     skipWindowsNewLine :: Scanner
     skipWindowsNewLine = s{source = drop 2 s.source, line = s.line + 1}
