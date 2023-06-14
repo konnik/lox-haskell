@@ -4,13 +4,12 @@
 
 module Main where
 
-import Data.List (intercalate, intersperse)
+import Data.List (intersperse)
 import Result
 import Scanner
 import System.Environment (getArgs)
 import System.Exit (ExitCode (ExitFailure), exitWith)
-import System.IO (hFlush, hPutStrLn, stderr, stdin, stdout)
-import Token
+import System.IO (hFlush, hPutStrLn, stderr, stdout)
 
 main :: IO ()
 main = do
