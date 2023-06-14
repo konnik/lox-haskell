@@ -37,6 +37,14 @@ nextToken s =
         ';' : _ -> emit SEMICOLON 1
         '/' : _ -> emit SLASH 1
         '*' : _ -> emit STAR 1
+        '!' : '=' : _ -> emit BANG_EQUAL 2
+        '!' : _ -> emit BANG 1
+        '=' : '=' : _ -> emit EQUAL_EQUAL 2
+        '=' : _ -> emit EQUAL 1
+        '<' : '=' : _ -> emit LESS_EQUAL 2
+        '<' : _ -> emit LESS 1
+        '>' : '=' : _ -> emit GREATER_EQUAL 2
+        '>' : _ -> emit GREATER 1
         '\r' : '\n' : _ -> nextToken $ skipWindowsNewLine
         '\n' : _ -> nextToken $ skipLinuxNewLine
         ' ' : _ -> nextToken $ skipWs
