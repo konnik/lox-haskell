@@ -35,7 +35,6 @@ nextToken s =
         '-' : _ -> emit MINUS 1
         '+' : _ -> emit PLUS 1
         ';' : _ -> emit SEMICOLON 1
-        '/' : _ -> emit SLASH 1
         '*' : _ -> emit STAR 1
         '!' : '=' : _ -> emit BANG_EQUAL 2
         '!' : _ -> emit BANG 1
@@ -45,7 +44,8 @@ nextToken s =
         '<' : _ -> emit LESS 1
         '>' : '=' : _ -> emit GREATER_EQUAL 2
         '>' : _ -> emit GREATER 1
-        -- TODO comments
+        '/' : '/' : _ -> nextToken $ ignoreRestOfLine
+        '/' : _ -> emit SLASH 1
         '\n' : _ -> nextToken $ skipLinuxNewLine
         ' ' : _ -> nextToken $ skipWs
         '\r' : _ -> nextToken $ skipWs
@@ -54,6 +54,9 @@ nextToken s =
   where
     skipLinuxNewLine :: Scanner
     skipLinuxNewLine = s{source = drop 1 s.source, line = s.line + 1}
+
+    ignoreRestOfLine :: Scanner
+    ignoreRestOfLine = s{source = dropWhile ((/=) '\n') s.source}
 
     skipWs :: Scanner
     skipWs = s{source = drop 1 s.source}

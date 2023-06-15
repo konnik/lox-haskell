@@ -1,1 +1,4 @@
-print "Hello Lox!";
+// just a comment
+;
++ // print "Hello Lox!";
+!=
