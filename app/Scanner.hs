@@ -46,10 +46,10 @@ nextToken s =
         '>' : _ -> emit GREATER 1
         '/' : '/' : _ -> nextToken $ ignoreRestOfLine
         '/' : _ -> emit SLASH 1
-        '\n' : _ -> nextToken $ skipLinuxNewLine
         ' ' : _ -> nextToken $ skipWs
         '\r' : _ -> nextToken $ skipWs
         '\t' : _ -> nextToken $ skipWs
+        '\n' : _ -> nextToken $ skipLinuxNewLine
         x : _ -> errorResult s.line ("Unexpected character: " ++ show x)
   where
     skipLinuxNewLine :: Scanner

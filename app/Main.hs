@@ -4,12 +4,12 @@
 
 module Main where
 
-import Data.List (intersperse)
 import Result
 import Scanner
 import System.Environment (getArgs)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
+import Token (Token, type_)
 
 main :: IO ()
 main = do
@@ -35,10 +35,14 @@ run :: IO () -> String -> IO ()
 run onError source = do
     case scanTokens source of
         Right tokens -> do
-            putStrLn $ "Tokens: " <> mconcat (intersperse ", " (fmap show tokens))
+            reportTokens tokens
         Left err -> do
             reportError err
             onError
+
+reportTokens :: [Token] -> IO ()
+reportTokens tokens = do
+    putStrLn $ unlines $ fmap (\t -> show t.type_) tokens
 
 reportError :: Error -> IO ()
 reportError err =
