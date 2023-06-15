@@ -26,6 +26,7 @@ nextToken :: Scanner -> Result (Token, Scanner)
 nextToken s =
     case s.source of
         "" -> emit EOF 0
+        '"' : _ -> string
         '(' : _ -> emit LEFT_PAREN 1
         ')' : _ -> emit RIGHT_PAREN 1
         '{' : _ -> emit LEFT_BRACE 1
@@ -52,6 +53,31 @@ nextToken s =
         '\n' : _ -> nextToken $ skipLinuxNewLine
         x : _ -> errorResult s.line ("Unexpected character: " ++ show x)
   where
+    string :: Result (Token, Scanner)
+    string =
+        let
+            str = "\"" ++ takeWhile ((/=) '"') (drop 1 s.source) ++ "\""
+         in
+            if length str > length s.source
+                then errorResult s.line "Unterminated string."
+                else emitString str
+
+    emitString :: String -> Result (Token, Scanner)
+    emitString str =
+        let
+            newlines = length $ filter ((==) '\n') str
+         in
+            okResult $
+                ( Token
+                    { type_ = STRING (trimQuotes str)
+                    , lexeme = str
+                    , line = s.line
+                    }
+                , s
+                    { source = drop (length str) s.source
+                    , line = s.line + newlines
+                    }
+                )
     skipLinuxNewLine :: Scanner
     skipLinuxNewLine = s{source = drop 1 s.source, line = s.line + 1}
 
@@ -67,8 +93,10 @@ nextToken s =
             ( Token
                 { type_ = toktyp
                 , lexeme = take n s.source
-                , literal = ()
                 , line = s.line
                 }
             , s{source = drop n s.source}
             )
+
+trimQuotes :: String -> String
+trimQuotes str = reverse $ drop 1 $ reverse $ drop 1 str

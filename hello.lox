@@ -1,4 +1,5 @@
-// this is a comment
-(( )){} // grouping stuff
-!*+-/=<> <= == // operators
-,.; // punctuation
+// Parse this if u can...
+(( )){}          // grouping stuff
+!*+-/=<> <= ==   // operators
+,.;              // punctuation
+"Hello Lox!!!!"; // this is a string

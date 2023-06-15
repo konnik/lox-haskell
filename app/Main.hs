@@ -9,7 +9,7 @@ import Scanner
 import System.Environment (getArgs)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
-import Token (Token, type_)
+import Token (Token (..))
 
 main :: IO ()
 main = do
@@ -42,7 +42,7 @@ run onError source = do
 
 reportTokens :: [Token] -> IO ()
 reportTokens tokens = do
-    putStrLn $ unlines $ fmap (\t -> show t.type_) tokens
+    putStrLn $ unlines $ fmap (\t -> mconcat [show t.line, ": ", show t.type_]) tokens
 
 reportError :: Error -> IO ()
 reportError err =
