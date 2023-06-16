@@ -4,7 +4,9 @@
 
 module Scanner (scanTokens) where
 
-import Data.Char (isDigit)
+import Data.Char (isAlpha, isDigit)
+import qualified Data.Map as Map
+
 import Result
 import Token
 
@@ -62,8 +64,39 @@ nextToken s =
         '\r' : _ -> nextToken $ skipWs
         '\t' : _ -> nextToken $ skipWs
         '\n' : _ -> nextToken $ skipLinuxNewLine
-        x : _ -> errorResult s.line ("Unexpected character: " ++ show x)
+        x : _ ->
+            if isAlphaUnderscore x
+                then identifier
+                else errorResult s.line ("Unexpected character: " ++ show x)
   where
+    identifier :: Result (Token, Scanner)
+    identifier =
+        let
+            word = takeWhile isAlpahNumUnderscore s.source
+            keywords =
+                Map.fromList
+                    [ ("and", AND)
+                    , ("class", CLASS)
+                    , ("else", ELSE)
+                    , ("false", FALSE)
+                    , ("for", FOR)
+                    , ("fun", FUN)
+                    , ("if", IF)
+                    , ("nil", NIL)
+                    , ("or", OR)
+                    , ("print", PRINT)
+                    , ("return", RETURN)
+                    , ("super", SUPER)
+                    , ("this", THIS)
+                    , ("true", TRUE)
+                    , ("var", VAR)
+                    , ("while", WHILE)
+                    ]
+         in
+            case Map.lookup word keywords of
+                Just typ -> emit typ (length word)
+                Nothing -> emit IDENTIFIER (length word)
+
     digit :: Result (Token, Scanner)
     digit =
         let
@@ -138,3 +171,9 @@ nextToken s =
                 }
             , s{source = drop n s.source}
             )
+
+isAlphaUnderscore :: Char -> Bool
+isAlphaUnderscore ch = isAlpha ch || ch == '_'
+
+isAlpahNumUnderscore :: Char -> Bool
+isAlpahNumUnderscore ch = isAlphaUnderscore ch || isDigit ch

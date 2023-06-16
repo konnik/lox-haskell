@@ -1,7 +1,8 @@
 // Parse this if u can...
-3.1415           // float
+pi=3.141         // float
 42               // int
 (( )){}          // grouping stuff
 !*+-/=<> <= ==   // operators
 ,.;              // punctuation
 "Hello Lox!!!!"; // this is a string
+and class else false for fun if nil or print return super this true var while
