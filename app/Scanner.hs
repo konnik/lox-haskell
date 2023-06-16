@@ -4,6 +4,7 @@
 
 module Scanner (scanTokens) where
 
+import Data.Char (isDigit)
 import Result
 import Token
 
@@ -48,15 +49,55 @@ nextToken s =
         '/' : '/' : _ -> nextToken $ ignoreRestOfLine
         '/' : _ -> emit SLASH 1
         ' ' : _ -> nextToken $ skipWs
+        '0' : _ -> digit
+        '1' : _ -> digit
+        '2' : _ -> digit
+        '3' : _ -> digit
+        '4' : _ -> digit
+        '5' : _ -> digit
+        '6' : _ -> digit
+        '7' : _ -> digit
+        '8' : _ -> digit
+        '9' : _ -> digit
         '\r' : _ -> nextToken $ skipWs
         '\t' : _ -> nextToken $ skipWs
         '\n' : _ -> nextToken $ skipLinuxNewLine
         x : _ -> errorResult s.line ("Unexpected character: " ++ show x)
   where
+    digit :: Result (Token, Scanner)
+    digit =
+        let
+            digits = takeWhile isDigit s.source
+            rest = drop (length digits) s.source
+         in
+            case rest of
+                [] -> emitNumber digits
+                '.' : [] -> errorResult s.line "Missing digits after decimal point."
+                '.' : x : rest2 ->
+                    if not (isDigit x)
+                        then errorResult s.line "Expected digit after decimal point."
+                        else
+                            let digits2 = x : takeWhile isDigit rest2
+                             in emitNumber (digits ++ "." ++ digits2)
+                _ -> emitNumber digits
+
+    emitNumber :: String -> Result (Token, Scanner)
+    emitNumber str =
+        okResult $
+            ( Token
+                { type_ = NUMBER (read str)
+                , lexeme = str
+                , line = s.line
+                }
+            , s
+                { source = drop (length str) s.source
+                }
+            )
+
     string :: Result (Token, Scanner)
     string =
         let
-            str = "\"" ++ takeWhile ((/=) '"') (drop 1 s.source) ++ "\""
+            str = takeWhile ((/=) '"') (drop 1 s.source)
          in
             if length str > length s.source
                 then errorResult s.line "Unterminated string."
@@ -69,12 +110,12 @@ nextToken s =
          in
             okResult $
                 ( Token
-                    { type_ = STRING (trimQuotes str)
-                    , lexeme = str
+                    { type_ = STRING str
+                    , lexeme = '"' : str ++ "\""
                     , line = s.line
                     }
                 , s
-                    { source = drop (length str) s.source
+                    { source = drop (length str + 2) s.source
                     , line = s.line + newlines
                     }
                 )
@@ -97,6 +138,3 @@ nextToken s =
                 }
             , s{source = drop n s.source}
             )
-
-trimQuotes :: String -> String
-trimQuotes str = reverse $ drop 1 $ reverse $ drop 1 str

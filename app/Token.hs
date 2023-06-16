@@ -32,7 +32,7 @@ data TokenType
   | -- Literals.
     IDENTIFIER
   | STRING String
-  | NUMBER
+  | NUMBER Float
   | -- Keywords.
     AND
   | CLASS

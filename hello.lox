@@ -1,4 +1,6 @@
 // Parse this if u can...
+3.1415           // float
+42               // int
 (( )){}          // grouping stuff
 !*+-/=<> <= ==   // operators
 ,.;              // punctuation
