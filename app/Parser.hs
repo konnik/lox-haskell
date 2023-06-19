@@ -162,8 +162,8 @@ primary tokens = case tokens of
         LEFT_PAREN -> do
             (expr, rest2) <- expression rest
             case rest2 of
-                [] -> Left "End of file."
+                [] -> Left "Unexpected end of file."
                 next2 : rest3 -> case next2.type_ of
                     RIGHT_PAREN -> Right $ (Grouping expr, rest3)
                     _ -> Left $ "Expected right paren."
-        _ -> Left $ "Unexpected token: '" ++ show next.lexeme ++ "'"
+        _ -> Left $ "An expression can not start with : '" ++ next.lexeme ++ "'"

@@ -30,7 +30,7 @@ data TokenType
   | LESS
   | LESS_EQUAL
   | -- Literals.
-    IDENTIFIER
+    IDENTIFIER String
   | STRING String
   | NUMBER Float
   | -- Keywords.
