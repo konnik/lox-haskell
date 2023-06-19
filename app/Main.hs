@@ -4,6 +4,7 @@
 
 module Main where
 
+import qualified Parser
 import Result
 import Scanner
 import System.Environment (getArgs)
@@ -35,7 +36,16 @@ run :: IO () -> String -> IO ()
 run onError source = do
     case scanTokens source of
         Right tokens -> do
+            putStrLn "Input tokens: "
             reportTokens tokens
+            case Parser.parse tokens of
+                Left str -> putStrLn ("Parse error: " ++ str)
+                Right (expr, tokens2) -> do
+                    putStrLn "Parsed expresson: "
+                    putStrLn $ show expr
+                    putStrLn ""
+                    putStrLn "Unprocessed tokens: "
+                    reportTokens tokens2
         Left err -> do
             reportError err
             onError
