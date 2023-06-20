@@ -40,12 +40,9 @@ run onError source = do
             reportTokens tokens
             case Parser.parse tokens of
                 Left str -> putStrLn ("Parse error: " ++ str)
-                Right (expr, tokens2) -> do
+                Right expr -> do
                     putStrLn "Parsed expresson: "
                     putStrLn $ show expr
-                    putStrLn ""
-                    putStrLn "Unprocessed tokens: "
-                    reportTokens tokens2
         Left err -> do
             reportError err
             onError

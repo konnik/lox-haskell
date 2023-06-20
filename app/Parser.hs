@@ -91,6 +91,12 @@ peek = Parser $ \tokens ->
         t : _ -> (tokens, Right t)
 
 {- |
+Skips next token without returning it.
+-}
+skip :: Parser ()
+skip = const () <$> consume
+
+{- |
 Consume next token and return it.
 -}
 consume :: Parser Token
@@ -112,118 +118,132 @@ unary          → ( "!" | "-" ) unary
 primary        → NUMBER | STRING | "true" | "false" | "nil"
                | "(" expression ")" ;
 -}
-parse :: [Token] -> Either String (Expr, [Token])
+parse :: [Token] -> Either String Expr
 parse tokens = do
-    expression tokens
+    snd $ runParser lox tokens
 
-expression :: [Token] -> Either String (Expr, [Token])
-expression tokens =
-    equality tokens
+parseError :: String -> Parser a
+parseError msg = Parser $ \tokens -> (tokens, Left $ msg)
 
-equality :: [Token] -> Either String (Expr, [Token])
-equality tokens = do
-    (expr, rest) <- comparison tokens
-    equalityLoop expr rest
+lox :: Parser Expr
+lox = do
+    expr <- expression
+    match EOF
+    pure $ expr
 
-equalityLoop :: Expr -> [Token] -> Either String (Expr, [Token])
-equalityLoop expr1 tokens =
-    case tokens of
-        [] -> Right (expr1, tokens)
-        next : rest -> case next.type_ of
-            BANG_EQUAL -> do
-                (expr2, rest2) <- comparison rest
-                equalityLoop (Binary expr1 NotEqual expr2) rest2
-            EQUAL_EQUAL -> do
-                (expr2, rest2) <- comparison rest
-                equalityLoop (Binary expr1 Equal expr2) rest2
-            _ -> Right (expr1, tokens)
+expression :: Parser Expr
+expression = do
+    equality
 
-comparison :: [Token] -> Either String (Expr, [Token])
-comparison tokens = do
-    (expr, rest) <- term tokens
-    comparisonLoop expr rest
+equality :: Parser Expr
+equality = do
+    expr <- comparison
+    equalityLoop expr
 
-comparisonLoop :: Expr -> [Token] -> Either String (Expr, [Token])
-comparisonLoop expr1 tokens = do
-    case tokens of
-        [] -> Right (expr1, tokens)
-        next : rest -> case next.type_ of
-            GREATER -> do
-                (expr2, rest2) <- term rest
-                comparisonLoop (Binary expr1 GreaterThan expr2) rest2
-            GREATER_EQUAL -> do
-                (expr2, rest2) <- term rest
-                comparisonLoop (Binary expr1 GreaterOrEqual expr2) rest2
-            LESS -> do
-                (expr2, rest2) <- term rest
-                comparisonLoop (Binary expr1 LessThan expr2) rest2
-            LESS_EQUAL -> do
-                (expr2, rest2) <- term rest
-                comparisonLoop (Binary expr1 LessOrEqual expr2) rest2
-            _ -> Right (expr1, tokens)
+equalityLoop :: Expr -> Parser Expr
+equalityLoop expr1 = do
+    next <- peek
+    case next.type_ of
+        BANG_EQUAL -> do
+            skip
+            expr2 <- comparison
+            equalityLoop $ Binary expr1 NotEqual expr2
+        EQUAL_EQUAL -> do
+            skip
+            expr2 <- comparison
+            equalityLoop $ Binary expr1 Equal expr2
+        _ -> pure expr1
 
-term :: [Token] -> Either String (Expr, [Token])
-term tokens = do
-    (expr, rest) <- factor tokens
-    termLoop expr rest
+comparison :: Parser Expr
+comparison = do
+    expr <- term
+    comparisonLoop expr
 
-termLoop :: Expr -> [Token] -> Either String (Expr, [Token])
-termLoop expr1 tokens = do
-    case tokens of
-        [] -> Right (expr1, tokens)
-        next : rest -> case next.type_ of
-            MINUS -> do
-                (expr2, rest2) <- factor rest
-                termLoop (Binary expr1 Subtraction expr2) rest2
-            PLUS -> do
-                (expr2, rest2) <- factor rest
-                termLoop (Binary expr1 Addition expr2) rest2
-            _ -> Right (expr1, tokens)
+comparisonLoop :: Expr -> Parser Expr
+comparisonLoop expr1 = do
+    next <- peek
+    case next.type_ of
+        GREATER -> do
+            skip
+            expr2 <- term
+            comparisonLoop (Binary expr1 GreaterThan expr2)
+        GREATER_EQUAL -> do
+            skip
+            expr2 <- term
+            comparisonLoop (Binary expr1 GreaterOrEqual expr2)
+        LESS -> do
+            skip
+            expr2 <- term
+            comparisonLoop (Binary expr1 LessThan expr2)
+        LESS_EQUAL -> do
+            skip
+            expr2 <- term
+            comparisonLoop (Binary expr1 LessOrEqual expr2)
+        _ -> pure expr1
 
-factor :: [Token] -> Either String (Expr, [Token])
-factor tokens = do
-    (expr, rest) <- unary tokens
-    factorLoop expr rest
+term :: Parser Expr
+term = do
+    expr <- factor
+    termLoop expr
 
-factorLoop :: Expr -> [Token] -> Either String (Expr, [Token])
-factorLoop expr1 tokens = do
-    case tokens of
-        [] -> Right (expr1, tokens)
-        next : rest -> case next.type_ of
-            SLASH -> do
-                (expr2, rest2) <- unary rest
-                factorLoop (Binary expr1 Division expr2) rest2
-            STAR -> do
-                (expr2, rest2) <- unary rest
-                factorLoop (Binary expr1 Multiplication expr2) rest2
-            _ -> Right (expr1, tokens)
-
-unary :: [Token] -> Either String (Expr, [Token])
-unary tokens = case tokens of
-    [] -> Left "End of file."
-    next : rest -> case next.type_ of
-        BANG -> do
-            (expr, rest2) <- unary rest
-            Right (Unary Not expr, rest2)
+termLoop :: Expr -> Parser Expr
+termLoop expr1 = do
+    next <- peek
+    case next.type_ of
         MINUS -> do
-            (expr, rest2) <- unary rest
-            Right (Unary Negate expr, rest2)
-        _ -> primary tokens
+            skip
+            expr2 <- factor
+            termLoop (Binary expr1 Subtraction expr2)
+        PLUS -> do
+            skip
+            expr2 <- factor
+            termLoop (Binary expr1 Addition expr2)
+        _ -> pure expr1
 
-primary :: [Token] -> Either String (Expr, [Token])
-primary tokens = case tokens of
-    [] -> Left "End of file."
-    next : rest -> case next.type_ of
-        NUMBER value -> Right $ (Literal (LiteralNumber value), rest)
-        STRING value -> Right $ (Literal (LiteralString value), rest)
-        TRUE -> Right $ (Literal LiteralTrue, rest)
-        FALSE -> Right $ (Literal LiteralFalse, rest)
-        NIL -> Right $ (Literal LiteralNil, rest)
+factor :: Parser Expr
+factor = do
+    expr <- unary
+    factorLoop expr
+
+factorLoop :: Expr -> Parser Expr
+factorLoop expr1 = do
+    next <- peek
+    case next.type_ of
+        SLASH -> do
+            skip
+            expr2 <- unary
+            factorLoop (Binary expr1 Division expr2)
+        STAR -> do
+            skip
+            expr2 <- unary
+            factorLoop (Binary expr1 Multiplication expr2)
+        _ -> pure expr1
+
+unary :: Parser Expr
+unary = do
+    next <- peek
+    case next.type_ of
+        BANG -> do
+            skip
+            expr <- unary
+            pure $ Unary Not expr
+        MINUS -> do
+            skip
+            expr <- unary
+            pure $ Unary Negate expr
+        _ -> primary
+
+primary :: Parser Expr
+primary = do
+    next <- consume
+    case next.type_ of
+        NUMBER value -> pure $ Literal (LiteralNumber value)
+        STRING value -> pure $ Literal (LiteralString value)
+        TRUE -> pure $ Literal LiteralTrue
+        FALSE -> pure $ Literal LiteralFalse
+        NIL -> pure $ Literal LiteralNil
         LEFT_PAREN -> do
-            (expr, rest2) <- expression rest
-            case rest2 of
-                [] -> Left "Unexpected end of file."
-                next2 : rest3 -> case next2.type_ of
-                    RIGHT_PAREN -> Right $ (Grouping expr, rest3)
-                    _ -> Left $ "Expected right paren."
-        _ -> Left $ "An expression can not start with : '" ++ next.lexeme ++ "'"
+            expr <- expression
+            match RIGHT_PAREN
+            pure $ Grouping expr
+        _ -> parseError $ "An expression can not start with : '" ++ next.lexeme ++ "'"
