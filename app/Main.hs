@@ -35,15 +35,20 @@ runFile fileName = do
 
 run :: IO () -> String -> IO ()
 run onError source = do
+    putStrLn $ "Input: "
+    putStrLn source
+    putStrLn ""
+
     case scanTokens source of
         Right tokens -> do
-            putStrLn "Input tokens: "
+            putStrLn "Tokens: "
             reportTokens tokens
             case Parser.parse tokens of
                 Left str -> putStrLn ("Parse error: " ++ str)
                 Right expr -> do
-                    putStrLn "Parsed expresson: "
+                    putStrLn "Parsed expresson tree: "
                     putStrLn $ show expr
+                    putStrLn ""
                     putStrLn "Evaluated expression:"
                     case Interpreter.eval expr of
                         Left err -> putStrLn $ "Eval error: " ++ err
