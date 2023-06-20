@@ -70,7 +70,10 @@ evalBinary op lhs rhs = do
         Addition -> evalAdditionOrStringConcatination leftVal rightVal
         Subtraction -> evalArithmetic (-) leftVal rightVal
         Multiplication -> evalArithmetic (*) leftVal rightVal
-        Division -> evalArithmetic (/) leftVal rightVal
+        Division ->
+            if rightVal == NumVal 0
+                then Left "Divison by zero."
+                else evalArithmetic ((/)) leftVal rightVal
         LessOrEqual -> evalComparison (<=) leftVal rightVal
         LessThan -> evalComparison (<) leftVal rightVal
         GreaterOrEqual -> evalComparison (>=) leftVal rightVal
