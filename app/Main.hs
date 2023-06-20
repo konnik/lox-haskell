@@ -4,6 +4,7 @@
 
 module Main where
 
+import qualified Interpreter
 import qualified Parser
 import Result
 import Scanner
@@ -43,6 +44,10 @@ run onError source = do
                 Right expr -> do
                     putStrLn "Parsed expresson: "
                     putStrLn $ show expr
+                    putStrLn "Evaluated expression:"
+                    case Interpreter.eval expr of
+                        Left err -> putStrLn $ "Eval error: " ++ err
+                        Right value -> putStrLn $ show value
         Left err -> do
             reportError err
             onError
