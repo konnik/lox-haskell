@@ -9,6 +9,50 @@ data Value
     | NilVal
     deriving (Show, Eq)
 
+valueToString :: Value -> String
+valueToString value =
+    case value of
+        StrVal str -> str
+        NumVal n -> normalizeNum (show n)
+        BoolVal True -> "true"
+        BoolVal False -> "false"
+        NilVal -> "nil"
+  where
+    normalizeNum str =
+        case reverse str of
+            '0' : '.' : rest -> reverse rest
+            _ -> str
+
+run :: [Stmt] -> IO ()
+run stmts = do
+    case stmts of
+        [] -> pure ()
+        stmt : rest -> do
+            result <- runStmt stmt
+            case result of
+                Right () ->
+                    run rest
+                Left err ->
+                    putStrLn $ "Runtime error: " ++ err
+
+runStmt :: Stmt -> IO (Either String ())
+runStmt stmt = do
+    case stmt of
+        StmtPrint expr ->
+            case eval expr of
+                Right value -> do
+                    putStrLn $ valueToString value
+                    pure $ Right ()
+                Left err -> do
+                    pure $ Left err
+        StmtExpr expr ->
+            case eval expr of
+                Right _ -> do
+                    pure $ Right ()
+                Left err -> do
+                    putStrLn err
+                    pure $ Left err
+
 eval :: Expr -> Either String Value
 eval expr =
     case expr of

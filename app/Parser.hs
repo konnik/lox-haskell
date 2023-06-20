@@ -38,7 +38,7 @@ unexpectedEndOfFile :: ([Token], Either String a)
 unexpectedEndOfFile = ([], Left "Unexpected end of file.")
 
 {- |
-Matches and consumes a specific token type.
+Matches and consumes a specific token without returning it.
 -}
 match :: TokenType -> Parser ()
 match tokenType = do
@@ -84,9 +84,9 @@ unary          → ( "!" | "-" ) unary
 primary        → NUMBER | STRING | "true" | "false" | "nil"
                | "(" expression ")" ;
 -}
-parse :: [Token] -> Either String Expr
+parse :: [Token] -> Either String [Stmt]
 parse tokens = do
-    snd $ runParser lox tokens
+    snd $ runParser program tokens
 
 {- |
 Fails the parsing with an error message.
@@ -97,11 +97,35 @@ parseError token msg = Parser $ \tokens ->
     , Left $ "line " ++ show token.line ++ ": " ++ msg
     )
 
-lox :: Parser Expr
-lox = do
+program :: Parser [Stmt]
+program = do
+    next <- peek
+    if next.type_ == EOF
+        then pure []
+        else do
+            stmt <- statement
+            fmap ((:) stmt) program
+
+statement :: Parser Stmt
+statement = do
+    next <- peek
+    case next.type_ of
+        PRINT -> do
+            printStatement
+        _ -> expressionStatement
+
+printStatement :: Parser Stmt
+printStatement = do
+    match PRINT
     expr <- expression
-    match EOF
-    pure expr
+    match SEMICOLON
+    pure $ StmtPrint expr
+
+expressionStatement :: Parser Stmt
+expressionStatement = do
+    expr <- expression
+    match SEMICOLON
+    pure $ StmtExpr expr
 
 expression :: Parser Expr
 expression = do

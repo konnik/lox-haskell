@@ -4,6 +4,7 @@
 
 module Main where
 
+import Ast (Stmt)
 import qualified Interpreter
 import qualified Parser
 import Result
@@ -45,14 +46,13 @@ run onError source = do
             reportTokens tokens
             case Parser.parse tokens of
                 Left str -> putStrLn ("Parse error: " ++ str)
-                Right expr -> do
-                    putStrLn "Parsed expresson tree: "
-                    putStrLn $ show expr
+                Right program -> do
+                    putStrLn "Parsed statements: "
+                    reportStatements program
                     putStrLn ""
-                    putStrLn "Evaluated expression:"
-                    case Interpreter.eval expr of
-                        Left err -> putStrLn $ "Eval error: " ++ err
-                        Right value -> putStrLn $ show value
+                    putStrLn "Program output:"
+                    Interpreter.run program
+                    putStrLn "Done."
         Left err -> do
             reportError err
             onError
@@ -60,6 +60,10 @@ run onError source = do
 reportTokens :: [Token] -> IO ()
 reportTokens tokens = do
     putStrLn $ unlines $ fmap (\t -> mconcat [show t.line, ": ", show t.type_]) tokens
+
+reportStatements :: [Stmt] -> IO ()
+reportStatements stmts =
+    mapM_ putStrLn (fmap show stmts)
 
 reportError :: Error -> IO ()
 reportError err =

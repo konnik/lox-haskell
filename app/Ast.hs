@@ -1,5 +1,10 @@
 module Ast where
 
+data Stmt
+    = StmtPrint Expr
+    | StmtExpr Expr
+    deriving (Show)
+
 data Expr
     = Binary BinaryOp Expr Expr
     | Grouping Expr
