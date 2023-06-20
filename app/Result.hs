@@ -9,6 +9,8 @@ data Error = Error
     , where_ :: String
     , message :: String
     }
+    deriving (Show)
+
 type Result a = Either Error a
 
 okResult :: a -> Result a

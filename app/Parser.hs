@@ -1,8 +1,13 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
-module Parser (parse) where
+module Parser (
+    parse,
+    peek,
+    match,
+    consume,
+    Parser (..),
+) where
 
 import Token (Token (..), TokenType (..))
 
@@ -38,6 +43,61 @@ data UnaryOp
     = Negate
     | Not
     deriving (Show)
+
+newtype Parser a = Parser {runParser :: [Token] -> ([Token], Either String a)}
+
+instance Functor Parser where
+    fmap f p = Parser $ \tokens ->
+        case runParser p tokens of
+            (tokens', Right v) -> (tokens', Right (f v))
+            (tokens', Left err) -> (tokens', Left err)
+
+instance Applicative Parser where
+    pure value = Parser $ \tokens -> (tokens, Right value)
+    (<*>) fab fa = Parser $ \tokens ->
+        case runParser fab tokens of
+            (tokens', Right ab) -> runParser (fmap ab fa) tokens'
+            (tokens', Left err) -> (tokens', Left err)
+
+instance Monad Parser where
+    return = pure
+    (>>=) ma amb = Parser $ \tokens ->
+        case runParser ma tokens of
+            (tokens', Right a) -> runParser (amb a) tokens'
+            (tokens', Left err) -> (tokens', Left err)
+
+unexpectedEndOfFile :: ([Token], Either String a)
+unexpectedEndOfFile = ([], Left "Unexpected end of file.")
+
+{- |
+Matches and consumes a specific token type.
+-}
+match :: TokenType -> Parser ()
+match tokenType = Parser $ \tokens ->
+    case tokens of
+        [] -> unexpectedEndOfFile
+        t : tokens' ->
+            if t.type_ == tokenType
+                then (tokens', Right ())
+                else (tokens, Left $ "Expected " ++ show tokenType ++ " but was " ++ show t.type_)
+
+{- |
+Returns next token without consuming it.
+-}
+peek :: Parser Token
+peek = Parser $ \tokens ->
+    case tokens of
+        [] -> unexpectedEndOfFile
+        t : _ -> (tokens, Right t)
+
+{- |
+Consume next token and return it.
+-}
+consume :: Parser Token
+consume = Parser $ \tokens ->
+    case tokens of
+        [] -> unexpectedEndOfFile
+        t : tokens' -> (tokens', Right t)
 
 {-
 Lox Grammar:
