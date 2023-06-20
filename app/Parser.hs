@@ -63,80 +63,80 @@ expression tokens =
 equality :: [Token] -> Either String (Expr, [Token])
 equality tokens = do
     (expr, rest) <- comparison tokens
-    loop expr rest
-  where
-    loop :: Expr -> [Token] -> Either String (Expr, [Token])
-    loop expr1 tokens2 =
-        case tokens2 of
-            [] -> Right (expr1, tokens2)
-            next : rest -> case next.type_ of
-                BANG_EQUAL -> do
-                    (expr2, rest2) <- comparison rest
-                    loop (Binary expr1 NotEqual expr2) rest2
-                EQUAL_EQUAL -> do
-                    (expr2, rest2) <- comparison rest
-                    loop (Binary expr1 Equal expr2) rest2
-                _ -> Right (expr1, tokens2)
+    equalityLoop expr rest
+
+equalityLoop :: Expr -> [Token] -> Either String (Expr, [Token])
+equalityLoop expr1 tokens =
+    case tokens of
+        [] -> Right (expr1, tokens)
+        next : rest -> case next.type_ of
+            BANG_EQUAL -> do
+                (expr2, rest2) <- comparison rest
+                equalityLoop (Binary expr1 NotEqual expr2) rest2
+            EQUAL_EQUAL -> do
+                (expr2, rest2) <- comparison rest
+                equalityLoop (Binary expr1 Equal expr2) rest2
+            _ -> Right (expr1, tokens)
 
 comparison :: [Token] -> Either String (Expr, [Token])
 comparison tokens = do
     (expr, rest) <- term tokens
-    loop expr rest
-  where
-    loop :: Expr -> [Token] -> Either String (Expr, [Token])
-    loop expr1 tokens2 = do
-        case tokens2 of
-            [] -> Right (expr1, tokens2)
-            next : rest -> case next.type_ of
-                GREATER -> do
-                    (expr2, rest2) <- term rest
-                    loop (Binary expr1 GreaterThan expr2) rest2
-                GREATER_EQUAL -> do
-                    (expr2, rest2) <- term rest
-                    loop (Binary expr1 GreaterOrEqual expr2) rest2
-                LESS -> do
-                    (expr2, rest2) <- term rest
-                    loop (Binary expr1 LessThan expr2) rest2
-                LESS_EQUAL -> do
-                    (expr2, rest2) <- term rest
-                    loop (Binary expr1 LessOrEqual expr2) rest2
-                _ -> Right (expr1, tokens2)
+    comparisonLoop expr rest
+
+comparisonLoop :: Expr -> [Token] -> Either String (Expr, [Token])
+comparisonLoop expr1 tokens = do
+    case tokens of
+        [] -> Right (expr1, tokens)
+        next : rest -> case next.type_ of
+            GREATER -> do
+                (expr2, rest2) <- term rest
+                comparisonLoop (Binary expr1 GreaterThan expr2) rest2
+            GREATER_EQUAL -> do
+                (expr2, rest2) <- term rest
+                comparisonLoop (Binary expr1 GreaterOrEqual expr2) rest2
+            LESS -> do
+                (expr2, rest2) <- term rest
+                comparisonLoop (Binary expr1 LessThan expr2) rest2
+            LESS_EQUAL -> do
+                (expr2, rest2) <- term rest
+                comparisonLoop (Binary expr1 LessOrEqual expr2) rest2
+            _ -> Right (expr1, tokens)
 
 term :: [Token] -> Either String (Expr, [Token])
 term tokens = do
     (expr, rest) <- factor tokens
-    loop expr rest
-  where
-    loop :: Expr -> [Token] -> Either String (Expr, [Token])
-    loop expr1 tokens2 = do
-        case tokens2 of
-            [] -> Right (expr1, tokens2)
-            next : rest -> case next.type_ of
-                MINUS -> do
-                    (expr2, rest2) <- factor rest
-                    loop (Binary expr1 Subtraction expr2) rest2
-                PLUS -> do
-                    (expr2, rest2) <- factor rest
-                    loop (Binary expr1 Addition expr2) rest2
-                _ -> Right (expr1, tokens2)
+    termLoop expr rest
+
+termLoop :: Expr -> [Token] -> Either String (Expr, [Token])
+termLoop expr1 tokens = do
+    case tokens of
+        [] -> Right (expr1, tokens)
+        next : rest -> case next.type_ of
+            MINUS -> do
+                (expr2, rest2) <- factor rest
+                termLoop (Binary expr1 Subtraction expr2) rest2
+            PLUS -> do
+                (expr2, rest2) <- factor rest
+                termLoop (Binary expr1 Addition expr2) rest2
+            _ -> Right (expr1, tokens)
 
 factor :: [Token] -> Either String (Expr, [Token])
 factor tokens = do
     (expr, rest) <- unary tokens
-    loop expr rest
-  where
-    loop :: Expr -> [Token] -> Either String (Expr, [Token])
-    loop expr1 tokens2 = do
-        case tokens2 of
-            [] -> Right (expr1, tokens2)
-            next : rest -> case next.type_ of
-                SLASH -> do
-                    (expr2, rest2) <- unary rest
-                    loop (Binary expr1 Division expr2) rest2
-                STAR -> do
-                    (expr2, rest2) <- unary rest
-                    loop (Binary expr1 Multiplication expr2) rest2
-                _ -> Right (expr1, tokens2)
+    factorLoop expr rest
+
+factorLoop :: Expr -> [Token] -> Either String (Expr, [Token])
+factorLoop expr1 tokens = do
+    case tokens of
+        [] -> Right (expr1, tokens)
+        next : rest -> case next.type_ of
+            SLASH -> do
+                (expr2, rest2) <- unary rest
+                factorLoop (Binary expr1 Division expr2) rest2
+            STAR -> do
+                (expr2, rest2) <- unary rest
+                factorLoop (Binary expr1 Multiplication expr2) rest2
+            _ -> Right (expr1, tokens)
 
 unary :: [Token] -> Either String (Expr, [Token])
 unary tokens = case tokens of
