@@ -12,7 +12,7 @@ module Parser (
 import Token (Token (..), TokenType (..))
 
 data Expr
-    = Binary Expr BinaryOp Expr
+    = Binary BinaryOp Expr Expr
     | Grouping Expr
     | Literal LiteralValue
     | Unary UnaryOp Expr
@@ -73,13 +73,11 @@ unexpectedEndOfFile = ([], Left "Unexpected end of file.")
 Matches and consumes a specific token type.
 -}
 match :: TokenType -> Parser ()
-match tokenType = Parser $ \tokens ->
-    case tokens of
-        [] -> unexpectedEndOfFile
-        t : tokens' ->
-            if t.type_ == tokenType
-                then (tokens', Right ())
-                else (tokens, Left $ "Expected " ++ show tokenType ++ " but was " ++ show t.type_)
+match tokenType = do
+    next <- consume
+    if next.type_ == tokenType
+        then pure ()
+        else parseError next $ "Expected " ++ show tokenType ++ " but was " ++ show next.type_
 
 {- |
 Returns next token without consuming it.
@@ -122,8 +120,14 @@ parse :: [Token] -> Either String Expr
 parse tokens = do
     snd $ runParser lox tokens
 
-parseError :: String -> Parser a
-parseError msg = Parser $ \tokens -> (tokens, Left $ msg)
+{- |
+Fails the parsing with an error message.
+-}
+parseError :: Token -> String -> Parser a
+parseError token msg = Parser $ \tokens ->
+    ( tokens
+    , Left $ "line " ++ show token.line ++ ": " ++ msg
+    )
 
 lox :: Parser Expr
 lox = do
@@ -147,11 +151,11 @@ equalityLoop lhs = do
         BANG_EQUAL -> do
             skip
             rhs <- comparison
-            equalityLoop $ Binary lhs NotEqual rhs
+            equalityLoop $ Binary NotEqual lhs rhs
         EQUAL_EQUAL -> do
             skip
             rhs <- comparison
-            equalityLoop $ Binary lhs Equal rhs
+            equalityLoop $ Binary Equal lhs rhs
         _ -> pure lhs
 
 comparison :: Parser Expr
@@ -166,19 +170,19 @@ comparisonLoop lhs = do
         GREATER -> do
             skip
             rhs <- term
-            comparisonLoop (Binary lhs GreaterThan rhs)
+            comparisonLoop $ Binary GreaterThan lhs rhs
         GREATER_EQUAL -> do
             skip
             rhs <- term
-            comparisonLoop (Binary lhs GreaterOrEqual rhs)
+            comparisonLoop $ Binary GreaterOrEqual lhs rhs
         LESS -> do
             skip
             rhs <- term
-            comparisonLoop (Binary lhs LessThan rhs)
+            comparisonLoop $ Binary LessThan lhs rhs
         LESS_EQUAL -> do
             skip
             rhs <- term
-            comparisonLoop (Binary lhs LessOrEqual rhs)
+            comparisonLoop $ Binary LessOrEqual lhs rhs
         _ -> pure lhs
 
 term :: Parser Expr
@@ -193,11 +197,11 @@ termLoop lhs = do
         MINUS -> do
             skip
             rhs <- factor
-            termLoop (Binary lhs Subtraction rhs)
+            termLoop $ Binary Subtraction lhs rhs
         PLUS -> do
             skip
             rhs <- factor
-            termLoop (Binary lhs Addition rhs)
+            termLoop $ Binary Addition lhs rhs
         _ -> pure lhs
 
 factor :: Parser Expr
@@ -212,25 +216,19 @@ factorLoop lhs = do
         SLASH -> do
             skip
             rhs <- unary
-            factorLoop (Binary lhs Division rhs)
+            factorLoop $ Binary Division lhs rhs
         STAR -> do
             skip
             rhs <- unary
-            factorLoop (Binary lhs Multiplication rhs)
+            factorLoop $ Binary Multiplication lhs rhs
         _ -> pure lhs
 
 unary :: Parser Expr
 unary = do
     next <- peek
     case next.type_ of
-        BANG -> do
-            skip
-            expr <- unary
-            pure $ Unary Not expr
-        MINUS -> do
-            skip
-            expr <- unary
-            pure $ Unary Negate expr
+        BANG -> Unary Not <$> (skip >> unary)
+        MINUS -> Unary Negate <$> (skip >> unary)
         _ -> primary
 
 primary :: Parser Expr
@@ -246,4 +244,4 @@ primary = do
             expr <- expression
             match RIGHT_PAREN
             pure $ Grouping expr
-        _ -> parseError $ "An expression can not start with : '" ++ next.lexeme ++ "'"
+        _ -> parseError next $ "An expression can not start with " ++ show next.type_ ++ ""
