@@ -61,9 +61,9 @@ instance Applicative Parser where
 
 instance Monad Parser where
     return = pure
-    (>>=) ma amb = Parser $ \tokens ->
+    (>>=) ma f = Parser $ \tokens ->
         case runParser ma tokens of
-            (tokens', Right a) -> runParser (amb a) tokens'
+            (tokens', Right a) -> runParser (f a) tokens'
             (tokens', Left err) -> (tokens', Left err)
 
 unexpectedEndOfFile :: ([Token], Either String a)
@@ -129,7 +129,7 @@ lox :: Parser Expr
 lox = do
     expr <- expression
     match EOF
-    pure $ expr
+    pure expr
 
 expression :: Parser Expr
 expression = do
@@ -141,18 +141,18 @@ equality = do
     equalityLoop expr
 
 equalityLoop :: Expr -> Parser Expr
-equalityLoop expr1 = do
+equalityLoop lhs = do
     next <- peek
     case next.type_ of
         BANG_EQUAL -> do
             skip
-            expr2 <- comparison
-            equalityLoop $ Binary expr1 NotEqual expr2
+            rhs <- comparison
+            equalityLoop $ Binary lhs NotEqual rhs
         EQUAL_EQUAL -> do
             skip
-            expr2 <- comparison
-            equalityLoop $ Binary expr1 Equal expr2
-        _ -> pure expr1
+            rhs <- comparison
+            equalityLoop $ Binary lhs Equal rhs
+        _ -> pure lhs
 
 comparison :: Parser Expr
 comparison = do
@@ -160,26 +160,26 @@ comparison = do
     comparisonLoop expr
 
 comparisonLoop :: Expr -> Parser Expr
-comparisonLoop expr1 = do
+comparisonLoop lhs = do
     next <- peek
     case next.type_ of
         GREATER -> do
             skip
-            expr2 <- term
-            comparisonLoop (Binary expr1 GreaterThan expr2)
+            rhs <- term
+            comparisonLoop (Binary lhs GreaterThan rhs)
         GREATER_EQUAL -> do
             skip
-            expr2 <- term
-            comparisonLoop (Binary expr1 GreaterOrEqual expr2)
+            rhs <- term
+            comparisonLoop (Binary lhs GreaterOrEqual rhs)
         LESS -> do
             skip
-            expr2 <- term
-            comparisonLoop (Binary expr1 LessThan expr2)
+            rhs <- term
+            comparisonLoop (Binary lhs LessThan rhs)
         LESS_EQUAL -> do
             skip
-            expr2 <- term
-            comparisonLoop (Binary expr1 LessOrEqual expr2)
-        _ -> pure expr1
+            rhs <- term
+            comparisonLoop (Binary lhs LessOrEqual rhs)
+        _ -> pure lhs
 
 term :: Parser Expr
 term = do
@@ -187,18 +187,18 @@ term = do
     termLoop expr
 
 termLoop :: Expr -> Parser Expr
-termLoop expr1 = do
+termLoop lhs = do
     next <- peek
     case next.type_ of
         MINUS -> do
             skip
-            expr2 <- factor
-            termLoop (Binary expr1 Subtraction expr2)
+            rhs <- factor
+            termLoop (Binary lhs Subtraction rhs)
         PLUS -> do
             skip
-            expr2 <- factor
-            termLoop (Binary expr1 Addition expr2)
-        _ -> pure expr1
+            rhs <- factor
+            termLoop (Binary lhs Addition rhs)
+        _ -> pure lhs
 
 factor :: Parser Expr
 factor = do
@@ -206,18 +206,18 @@ factor = do
     factorLoop expr
 
 factorLoop :: Expr -> Parser Expr
-factorLoop expr1 = do
+factorLoop lhs = do
     next <- peek
     case next.type_ of
         SLASH -> do
             skip
-            expr2 <- unary
-            factorLoop (Binary expr1 Division expr2)
+            rhs <- unary
+            factorLoop (Binary lhs Division rhs)
         STAR -> do
             skip
-            expr2 <- unary
-            factorLoop (Binary expr1 Multiplication expr2)
-        _ -> pure expr1
+            rhs <- unary
+            factorLoop (Binary lhs Multiplication rhs)
+        _ -> pure lhs
 
 unary :: Parser Expr
 unary = do
