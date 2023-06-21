@@ -30,7 +30,6 @@ executable hlox
     Parser
     Result
     Scanner
-    Test
     Token
 
   -- LANGUAGE extensions used by modules in this package.

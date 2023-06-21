@@ -65,7 +65,6 @@ evalBinary :: BinaryOp -> Expr -> Expr -> Either String Value
 evalBinary op lhs rhs = do
     leftVal <- eval lhs
     rightVal <- eval rhs
-
     case op of
         Addition -> evalAdditionOrStringConcatination leftVal rightVal
         Subtraction -> evalArithmetic (-) leftVal rightVal

@@ -1,5 +1,5 @@
 print "Hello World!";
 print "The answer is:";
 print 42;
-print 3.1415/0;
+print 3.1415/2;
 print "korv" != "mos";

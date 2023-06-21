@@ -3,9 +3,6 @@
 
 module Parser (
     parse,
-    peek,
-    match,
-    consume,
     Parser (..),
 ) where
 
@@ -37,12 +34,45 @@ instance Monad Parser where
 unexpectedEndOfFile :: ([Token], Either String a)
 unexpectedEndOfFile = ([], Left "Unexpected end of file.")
 
+-- parsing primitives
+
+-- match(type) - checks to see if the current token has any of the given types. If so, it consumes the token and returns true. Otherwise, it returns false and leaves the current token alone.
+-- check(type) - returns true if the current token is of the given type. Unlike match(), it never consumes the token, it only looks at it.
+-- advance() - consumes the current token and returns it,
+
+-- isAtEnd() - checks if current token is EOF
+-- peek() - returns current token without consuming it
+-- previous() - returns previous token
+
+{- |
+    Checks if the current token matches the given type. If so, consumes the token and returns True.
+    Otherwise returns False without consuming the token.
+-}
+_match :: TokenType -> Parser Bool
+_match tokenType = do
+    tokenMatches <- check tokenType
+    if tokenMatches
+        then skip >> pure True
+        else pure False
+
+{- |
+    Returns true if the current token is of the given type.
+    Unlike match, it never consumes the token, it only looks at it.
+-}
+check :: TokenType -> Parser Bool
+check tokenType = do
+    next <- peek
+    if next.type_ == tokenType
+        then pure True
+        else pure False
+
 {- |
 Matches and consumes a specific token without returning it.
+Results in an error of topken does not match.
 -}
-match :: TokenType -> Parser ()
-match tokenType = do
-    next <- consume
+expect :: TokenType -> Parser ()
+expect tokenType = do
+    next <- advance
     if next.type_ == tokenType
         then pure ()
         else parseError next $ "Expected " ++ show tokenType ++ " but was " ++ show next.type_
@@ -57,16 +87,16 @@ peek = Parser $ \tokens ->
         t : _ -> (tokens, Right t)
 
 {- |
-Skips next token without returning it.
+Skips current token without returning it.
 -}
 skip :: Parser ()
-skip = const () <$> consume
+skip = const () <$> advance
 
 {- |
-Consume next token and return it.
+Consume current token and return it.
 -}
-consume :: Parser Token
-consume = Parser $ \tokens ->
+advance :: Parser Token
+advance = Parser $ \tokens ->
     case tokens of
         [] -> unexpectedEndOfFile
         t : tokens' -> (tokens', Right t)
@@ -99,8 +129,8 @@ parseError token msg = Parser $ \tokens ->
 
 program :: Parser [Stmt]
 program = do
-    next <- peek
-    if next.type_ == EOF
+    isEof <- check EOF
+    if isEof
         then pure []
         else do
             stmt <- statement
@@ -110,26 +140,24 @@ statement :: Parser Stmt
 statement = do
     next <- peek
     case next.type_ of
-        PRINT -> do
-            printStatement
+        PRINT -> printStatement
         _ -> expressionStatement
 
 printStatement :: Parser Stmt
 printStatement = do
-    match PRINT
+    expect PRINT
     expr <- expression
-    match SEMICOLON
+    expect SEMICOLON
     pure $ StmtPrint expr
 
 expressionStatement :: Parser Stmt
 expressionStatement = do
     expr <- expression
-    match SEMICOLON
+    expect SEMICOLON
     pure $ StmtExpr expr
 
 expression :: Parser Expr
-expression = do
-    equality
+expression = equality
 
 equality :: Parser Expr
 equality = do
@@ -225,7 +253,7 @@ unary = do
 
 primary :: Parser Expr
 primary = do
-    next <- consume
+    next <- advance
     case next.type_ of
         NUMBER value -> pure $ Literal (LiteralNumber value)
         STRING value -> pure $ Literal (LiteralString value)
@@ -234,6 +262,6 @@ primary = do
         NIL -> pure $ Literal LiteralNil
         LEFT_PAREN -> do
             expr <- expression
-            match RIGHT_PAREN
+            expect RIGHT_PAREN
             pure $ Grouping expr
         _ -> parseError next $ "An expression can not start with " ++ show next.type_ ++ ""
