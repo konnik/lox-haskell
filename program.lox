@@ -1,5 +1,10 @@
 var apa = "orangutang";
-print "Hej din " + apa + "!";  
-
+print "Jag är en " + apa + "...";  
 apa = "chimpans";
-print "Hej din " + apa + "!";  
+print "... och nu är jag en " + apa + "!";  
+
+var pi = 3.1415;
+var radius = 5;
+var area = pi*radius*radius;
+
+print area;
