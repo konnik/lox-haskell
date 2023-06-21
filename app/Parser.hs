@@ -213,16 +213,46 @@ expression = assignment
 assignment :: Parser Expr
 assignment = do
     prevToken <- peek
-    targetExpr <- equality
+    targetExpr <- logicOr
 
     isAssignment <- match EQUAL
     if isAssignment
         then do
-            valueExpr <- equality
+            valueExpr <- logicOr
             case targetExpr of
                 Variable varname -> pure $ Assignment varname valueExpr
                 _ -> parseError prevToken "Illegal target for assignment."
         else pure targetExpr
+
+logicOr :: Parser Expr
+logicOr = do
+    expr <- logicAnd
+    logicOrLoop expr
+
+logicOrLoop :: Expr -> Parser Expr
+logicOrLoop expr = do
+    isOr <- match OR
+    if isOr
+        then do
+            expr2 <- logicAnd
+            logicOrLoop (Logic LogicOr expr expr2)
+        else do
+            pure expr
+
+logicAnd :: Parser Expr
+logicAnd = do
+    expr <- equality
+    logicAndLoop expr
+
+logicAndLoop :: Expr -> Parser Expr
+logicAndLoop expr = do
+    isAnd <- match AND
+    if isAnd
+        then do
+            expr2 <- equality
+            logicAndLoop (Logic LogicAnd expr expr2)
+        else do
+            pure expr
 
 equality :: Parser Expr
 equality = do

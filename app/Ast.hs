@@ -15,6 +15,7 @@ data Expr
     | Unary UnaryOp Expr
     | Variable String
     | Assignment String Expr
+    | Logic LogicOp Expr Expr
     deriving (Show)
 
 data LiteralValue
@@ -42,4 +43,9 @@ data UnaryOp
     = Negate
     | Not
     | Show
+    deriving (Show)
+
+data LogicOp
+    = LogicOr
+    | LogicAnd
     deriving (Show)

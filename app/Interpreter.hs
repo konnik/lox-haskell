@@ -102,6 +102,21 @@ eval expr =
         Binary op lhs rhs -> evalBinary op lhs rhs
         Variable name -> evalVariable name
         Assignment name valueExpr -> evalAssignment name valueExpr
+        Logic op lhs rhs -> evalLogic op lhs rhs
+
+evalLogic :: LogicOp -> Expr -> Expr -> Evaluator Value
+evalLogic op lhs rhs =
+    case op of
+        LogicAnd -> do
+            lhsVal <- eval lhs
+            if isTruthy lhsVal
+                then eval rhs
+                else pure lhsVal
+        LogicOr -> do
+            lhsVal <- eval lhs
+            if isTruthy lhsVal
+                then pure $ lhsVal
+                else eval rhs
 
 evalAssignment :: String -> Expr -> Evaluator Value
 evalAssignment name expr = do

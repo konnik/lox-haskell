@@ -1,5 +1,16 @@
-if (true) 
-    if (false) 
-        print "Nope, not good!";
-    else 
-        print "If this prints everything is good.";
+print "hi" or 2; // "hi".
+print nil or "yes"; // "yes".
+
+print "hi" and 2; // "hi".
+print nil and "yes"; // "yes".
+
+var a = "apa";
+var b = false;
+var c = true;
+var d = true;
+
+if (a and (b or c) and d) {
+    print "yes";
+} else {
+    print "nope";
+}
