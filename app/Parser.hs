@@ -48,8 +48,8 @@ unexpectedEndOfFile = ([], Left "Unexpected end of file.")
     Checks if the current token matches the given type. If so, consumes the token and returns True.
     Otherwise returns False without consuming the token.
 -}
-_match :: TokenType -> Parser Bool
-_match tokenType = do
+match :: TokenType -> Parser Bool
+match tokenType = do
     tokenMatches <- check tokenType
     if tokenMatches
         then skip >> pure True
@@ -70,12 +70,15 @@ check tokenType = do
 Matches and consumes a specific token without returning it.
 Results in an error of topken does not match.
 -}
-expect :: TokenType -> Parser ()
+expect :: TokenType -> Parser Token
 expect tokenType = do
     next <- advance
     if next.type_ == tokenType
-        then pure ()
+        then pure next
         else parseError next $ "Expected " ++ show tokenType ++ " but was " ++ show next.type_
+
+expect_ :: TokenType -> Parser ()
+expect_ tokenType = const () <$> expect tokenType
 
 {- |
 Returns next token without consuming it.
@@ -133,8 +136,29 @@ program = do
     if isEof
         then pure []
         else do
-            stmt <- statement
+            stmt <- declaration
             fmap ((:) stmt) program
+
+declaration :: Parser Stmt
+declaration = do
+    isVar <- check VAR
+    if isVar
+        then varDeclaration
+        else statement
+
+varDeclaration :: Parser Stmt
+varDeclaration = do
+    expect_ VAR
+    identifer <- expect IDENTIFIER
+    hasInitialiser <- match EQUAL
+    if hasInitialiser
+        then do
+            initExpr <- expression
+            expect_ SEMICOLON
+            pure $ StmtVarDecl identifer.lexeme initExpr
+        else do
+            expect_ SEMICOLON
+            pure $ StmtVarDecl identifer.lexeme (Literal LiteralNil)
 
 statement :: Parser Stmt
 statement = do
@@ -145,19 +169,33 @@ statement = do
 
 printStatement :: Parser Stmt
 printStatement = do
-    expect PRINT
+    expect_ PRINT
     expr <- expression
-    expect SEMICOLON
+    expect_ SEMICOLON
     pure $ StmtPrint expr
 
 expressionStatement :: Parser Stmt
 expressionStatement = do
     expr <- expression
-    expect SEMICOLON
+    expect_ SEMICOLON
     pure $ StmtExpr expr
 
 expression :: Parser Expr
-expression = equality
+expression = assignment
+
+assignment :: Parser Expr
+assignment = do
+    prevToken <- peek
+    targetExpr <- equality
+
+    isAssignment <- match EQUAL
+    if isAssignment
+        then do
+            valueExpr <- equality
+            case targetExpr of
+                Variable varname -> pure $ Assignment varname valueExpr
+                _ -> parseError prevToken "Illegal target for assignment."
+        else pure targetExpr
 
 equality :: Parser Expr
 equality = do
@@ -262,6 +300,7 @@ primary = do
         NIL -> pure $ Literal LiteralNil
         LEFT_PAREN -> do
             expr <- expression
-            expect RIGHT_PAREN
+            expect_ RIGHT_PAREN
             pure $ Grouping expr
+        IDENTIFIER -> pure $ Variable next.lexeme
         _ -> parseError next $ "An expression can not start with " ++ show next.type_ ++ ""

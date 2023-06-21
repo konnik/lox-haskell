@@ -1,5 +1,5 @@
-print "Hello World!";
-print "The answer is:";
-print 42;
-print 3.1415/2;
-print "korv" != "mos";
+var apa = "orangutang";
+print "Hej din " + apa + "!";  
+
+apa = "chimpans";
+print "Hej din " + apa + "!";  

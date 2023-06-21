@@ -1,12 +1,8 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE NoFieldSelectors #-}
-
 module Main where
 
 import Ast (Stmt)
-import qualified Interpreter
-import qualified Parser
+import Interpreter qualified
+import Parser qualified
 import Result
 import Scanner
 import System.Environment (getArgs)

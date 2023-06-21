@@ -3,6 +3,7 @@ module Ast where
 data Stmt
     = StmtPrint Expr
     | StmtExpr Expr
+    | StmtVarDecl String Expr
     deriving (Show)
 
 data Expr
@@ -10,6 +11,8 @@ data Expr
     | Grouping Expr
     | Literal LiteralValue
     | Unary UnaryOp Expr
+    | Variable String
+    | Assignment String Expr
     deriving (Show)
 
 data LiteralValue

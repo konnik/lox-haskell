@@ -95,7 +95,7 @@ nextToken s =
          in
             case Map.lookup word keywords of
                 Just typ -> emit typ (length word)
-                Nothing -> emit (IDENTIFIER word) (length word)
+                Nothing -> emit IDENTIFIER (length word)
 
     digit :: Result (Token, Scanner)
     digit =
