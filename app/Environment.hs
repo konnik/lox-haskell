@@ -46,7 +46,7 @@ setVar name val env =
                 parent' <- setVar name val parent
                 pure $ env{parent = Just parent'}
             Nothing ->
-                Left $ "Varable not declared: '" ++ name ++ "'"
+                Left $ "Variable not declared: '" ++ name ++ "'"
 
 enterBlock :: Environment -> Environment
 enterBlock parent = newEnvironment{parent = Just parent}
