@@ -5,6 +5,7 @@ data Stmt
     | StmtExpr Expr
     | StmtVarDecl String Expr
     | StmtBlock [Stmt]
+    | StmtIf Expr Stmt (Maybe Stmt)
     deriving (Show)
 
 data Expr

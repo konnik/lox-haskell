@@ -32,27 +32,33 @@ runStmt env stmt = do
     case stmt of
         StmtPrint expr ->
             case runEvaluator (eval expr) env of
+                (_, Left err) -> runtimeError err
                 (env', Right value) -> do
                     putStrLn $ Value.toString value
                     pure $ pure env'
-                (_, Left err) -> do
-                    runtimeError err
         StmtExpr expr ->
             case runEvaluator (eval expr) env of
+                (_, Left err) -> runtimeError err
                 (env', Right _) -> do
                     pure $ pure env'
-                (_, Left err) -> do
-                    runtimeError err
         StmtVarDecl name initExpr ->
             case runEvaluator (eval initExpr) env of
+                (_, Left err) -> runtimeError err
                 (env', Right initalValue) -> do
                     pure $ pure (Environment.declareVar name initalValue env')
-                (_, Left err) -> do
-                    runtimeError err
         StmtBlock stmts -> do
             let blockEnv = Environment.enterBlock env
             blockEnv' <- runWithEnv blockEnv stmts
             pure $ pure $ Environment.leaveBlock blockEnv'
+        StmtIf cond thenStmt maybeElseStmt -> do
+            case runEvaluator (eval cond) env of
+                (_, Left err) -> runtimeError err
+                (env', Right condValue) ->
+                    if isTruthy condValue
+                        then runStmt env' thenStmt
+                        else case maybeElseStmt of
+                            Nothing -> pure $ pure env
+                            Just elseStmt -> runStmt env' elseStmt
 
 newtype Evaluator a = Evaluator {runEvaluator :: Environment -> (Environment, Either String a)}
 

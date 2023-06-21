@@ -1,7 +1,15 @@
-var a = 1;
-{
-  var a = a + 2;
-  print a;
-  b = "klj";
-}
-print a;
+var a = 8;
+var b = "kjorv";
+
+print "b: " + show b;    
+
+if (a<10) {
+    print "hej hopp";
+    print "många saker";
+    b = "japp";
+} else {
+    print "falskt";
+    b = "nope";
+} 
+
+print "b: " + show b;    

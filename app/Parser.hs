@@ -149,24 +149,40 @@ declaration = do
 varDeclaration :: Parser Stmt
 varDeclaration = do
     expect_ VAR
-    identifer <- expect IDENTIFIER
+    identifier <- expect IDENTIFIER
     hasInitialiser <- match EQUAL
     if hasInitialiser
         then do
             initExpr <- expression
             expect_ SEMICOLON
-            pure $ StmtVarDecl identifer.lexeme initExpr
+            pure $ StmtVarDecl identifier.lexeme initExpr
         else do
             expect_ SEMICOLON
-            pure $ StmtVarDecl identifer.lexeme (Literal LiteralNil)
+            pure $ StmtVarDecl identifier.lexeme (Literal LiteralNil)
 
 statement :: Parser Stmt
 statement = do
     next <- peek
     case next.type_ of
+        IF -> ifStatement
         PRINT -> skip >> printStatement
         LEFT_BRACE -> skip >> blockStatement []
         _ -> expressionStatement
+
+ifStatement :: Parser Stmt
+ifStatement = do
+    expect_ IF
+    expect_ LEFT_PAREN
+    condExpr <- expression
+    expect_ RIGHT_PAREN
+    thenStmt <- statement
+
+    hasElse <- match ELSE
+    if hasElse
+        then do
+            elseStmt <- statement
+            pure $ StmtIf condExpr thenStmt (Just elseStmt)
+        else pure $ StmtIf condExpr thenStmt Nothing
 
 blockStatement :: [Stmt] -> Parser Stmt
 blockStatement stmts = do
