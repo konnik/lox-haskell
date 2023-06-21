@@ -4,6 +4,7 @@ data Stmt
     = StmtPrint Expr
     | StmtExpr Expr
     | StmtVarDecl String Expr
+    | StmtBlock [Stmt]
     deriving (Show)
 
 data Expr

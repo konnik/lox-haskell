@@ -7,19 +7,22 @@ import Value (Value (..))
 import Value qualified
 
 run :: [Stmt] -> IO ()
-run = runWithEnv Environment.newEnvironment
+run stmts = do
+    _ <- runWithEnv Environment.newEnvironment stmts
+    pure ()
 
-runWithEnv :: Environment -> [Stmt] -> IO ()
+runWithEnv :: Environment -> [Stmt] -> IO Environment
 runWithEnv env stmts = do
     case stmts of
-        [] -> pure ()
+        [] -> pure env
         stmt : rest -> do
             result <- runStmt env stmt
             case result of
                 Right modifiedEnv ->
                     runWithEnv modifiedEnv rest
-                Left err ->
+                Left err -> do
                     putStrLn $ "Runtime error: " ++ err
+                    pure env
 
 runtimeError :: String -> IO (Either String a)
 runtimeError msg = pure $ Left msg
@@ -46,6 +49,10 @@ runStmt env stmt = do
                     pure $ pure (Environment.declareVar name initalValue env')
                 (_, Left err) -> do
                     runtimeError err
+        StmtBlock stmts -> do
+            let blockEnv = Environment.enterBlock env
+            blockEnv' <- runWithEnv blockEnv stmts
+            pure $ pure $ Environment.leaveBlock blockEnv'
 
 newtype Evaluator a = Evaluator {runEvaluator :: Environment -> (Environment, Either String a)}
 

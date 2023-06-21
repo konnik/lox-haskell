@@ -164,12 +164,23 @@ statement :: Parser Stmt
 statement = do
     next <- peek
     case next.type_ of
-        PRINT -> printStatement
+        PRINT -> skip >> printStatement
+        LEFT_BRACE -> skip >> blockStatement []
         _ -> expressionStatement
+
+blockStatement :: [Stmt] -> Parser Stmt
+blockStatement stmts = do
+    endOfBlock <- check RIGHT_BRACE
+    if not endOfBlock
+        then do
+            innerStmt <- declaration
+            blockStatement (stmts ++ [innerStmt])
+        else do
+            skip
+            pure $ StmtBlock stmts
 
 printStatement :: Parser Stmt
 printStatement = do
-    expect_ PRINT
     expr <- expression
     expect_ SEMICOLON
     pure $ StmtPrint expr

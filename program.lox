@@ -1,10 +1,24 @@
-var apa = "orangutang";
-print "Jag är en " + apa + "...";  
-apa = "chimpans";
-print "... och nu är jag en " + apa + "!";  
+var a = "global a";
+var b = "global b";
+var c = "global c";
+{
+  var a = "outer a";
+  var b = "outer b";
+  {
+    var a = "inner a";
+    print a;
+    print b;
+    print c;
+    print "";
 
-var pi = 3.1415;
-var radius = 5;
-var area = pi*radius*radius;
-
-print "Beräknad area: " + show area;
+    c = "modified global c";
+  }
+  print a;
+  print b;
+  print c;
+  print "";
+}
+print a;
+print b;
+print c;
+print "";
