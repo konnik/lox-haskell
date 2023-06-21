@@ -70,16 +70,18 @@ evalBinary op lhs rhs = do
         Addition -> evalAdditionOrStringConcatination leftVal rightVal
         Subtraction -> evalArithmetic (-) leftVal rightVal
         Multiplication -> evalArithmetic (*) leftVal rightVal
-        Division ->
-            if rightVal == NumVal 0
-                then Left "Divison by zero."
-                else evalArithmetic ((/)) leftVal rightVal
+        Division -> safeDivision leftVal rightVal
         LessOrEqual -> evalComparison (<=) leftVal rightVal
         LessThan -> evalComparison (<) leftVal rightVal
         GreaterOrEqual -> evalComparison (>=) leftVal rightVal
         GreaterThan -> evalComparison (>) leftVal rightVal
         Equal -> evalEqual id leftVal rightVal
         NotEqual -> evalEqual not leftVal rightVal
+
+safeDivision :: Value -> Value -> Either String Value
+safeDivision lhs rhs = case rhs of
+    NumVal 0 -> Left "Division by zero."
+    _ -> evalArithmetic ((/)) lhs rhs
 
 evalAdditionOrStringConcatination :: Value -> Value -> Either String Value
 evalAdditionOrStringConcatination lhs rhs =
