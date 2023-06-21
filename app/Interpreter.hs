@@ -59,6 +59,20 @@ runStmt env stmt = do
                         else case maybeElseStmt of
                             Nothing -> pure $ pure env
                             Just elseStmt -> runStmt env' elseStmt
+        StmtWhile cond whileStmt -> runWhileStmt env cond whileStmt
+
+runWhileStmt :: Environment -> Expr -> Stmt -> IO (Either String Environment)
+runWhileStmt env cond whileStmt =
+    case runEvaluator (eval cond) env of
+        (_, Left err) -> runtimeError err
+        (env', Right condValue) -> do
+            if isTruthy condValue
+                then do
+                    result <- runStmt env' whileStmt
+                    case result of
+                        Right env'' -> runWhileStmt env'' cond whileStmt
+                        Left err -> runtimeError err
+                else pure $ pure env'
 
 newtype Evaluator a = Evaluator {runEvaluator :: Environment -> (Environment, Either String a)}
 

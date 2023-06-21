@@ -1,16 +1,8 @@
-print "hi" or 2; // "hi".
-print nil or "yes"; // "yes".
-
-print "hi" and 2; // "hi".
-print nil and "yes"; // "yes".
-
-var a = "apa";
-var b = false;
-var c = true;
-var d = true;
-
-if (a and (b or c) and d) {
-    print "yes";
-} else {
-    print "nope";
+var str = "";
+var count = 0;
+while (str != "xxxxxxxxxx") {
+    str = str + "x";
+    print str;
+    count = count +1;
 }
+print "Antal varv: " + show count;

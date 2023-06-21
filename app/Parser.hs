@@ -165,9 +165,20 @@ statement = do
     next <- peek
     case next.type_ of
         IF -> ifStatement
-        PRINT -> skip >> printStatement
+        WHILE -> whileStatement
+        PRINT -> printStatement
         LEFT_BRACE -> skip >> blockStatement []
         _ -> expressionStatement
+
+whileStatement :: Parser Stmt
+whileStatement = do
+    expect_ WHILE
+    expect_ LEFT_PAREN
+    condExpr <- expression
+    expect_ RIGHT_PAREN
+    stmt <- statement
+
+    pure $ StmtWhile condExpr stmt
 
 ifStatement :: Parser Stmt
 ifStatement = do
@@ -197,6 +208,7 @@ blockStatement stmts = do
 
 printStatement :: Parser Stmt
 printStatement = do
+    expect_ PRINT
     expr <- expression
     expect_ SEMICOLON
     pure $ StmtPrint expr

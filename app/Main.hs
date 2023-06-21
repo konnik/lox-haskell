@@ -32,23 +32,23 @@ runFile fileName = do
 
 run :: IO () -> String -> IO ()
 run onError source = do
-    putStrLn $ "Input: "
-    putStrLn source
-    putStrLn ""
+    -- putStrLn $ "Input: "
+    -- putStrLn source
+    -- putStrLn ""
 
     case scanTokens source of
         Right tokens -> do
-            putStrLn "Tokens: "
-            reportTokens tokens
+            -- putStrLn "Tokens: "
+            -- reportTokens tokens
             case Parser.parse tokens of
                 Left str -> putStrLn ("Parse error: " ++ str)
                 Right program -> do
-                    putStrLn "Parsed statements: "
-                    reportStatements program
-                    putStrLn ""
-                    putStrLn "Program output:"
+                    -- putStrLn "Parsed statements: "
+                    -- reportStatements program
+                    -- putStrLn ""
+                    -- putStrLn "Program output:"
                     Interpreter.run program
-                    putStrLn "Done."
+        -- putStrLn "Done."
         Left err -> do
             reportError err
             onError
