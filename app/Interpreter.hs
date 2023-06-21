@@ -160,8 +160,9 @@ evalUnary op expr = do
 
     case (op, val) of
         (Negate, NumVal n) -> pure $ NumVal (-n)
-        (Negate, _) -> evalError $ "Only numbers kan be negated."
         (Not, _) -> pure $ BoolVal (not (isTruthy val))
+        (Show, v) -> pure $ StrVal (Value.toString v)
+        (Negate, _) -> evalError $ "Only numbers kan be negated."
 
 evalLiteral :: LiteralValue -> Evaluator Value
 evalLiteral litval =

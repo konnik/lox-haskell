@@ -287,6 +287,7 @@ unary = do
     case next.type_ of
         BANG -> Unary Not <$> (skip >> unary)
         MINUS -> Unary Negate <$> (skip >> unary)
+        SHOW -> Unary Show <$> (skip >> unary)
         _ -> primary
 
 primary :: Parser Expr

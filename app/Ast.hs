@@ -39,4 +39,5 @@ data BinaryOp
 data UnaryOp
     = Negate
     | Not
+    | Show
     deriving (Show)

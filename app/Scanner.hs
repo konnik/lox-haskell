@@ -5,7 +5,7 @@
 module Scanner (scanTokens) where
 
 import Data.Char (isAlpha, isDigit)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 
 import Result
 import Token
@@ -85,6 +85,7 @@ nextToken s =
                     , ("nil", NIL)
                     , ("or", OR)
                     , ("print", PRINT)
+                    , ("show", SHOW)
                     , ("return", RETURN)
                     , ("super", SUPER)
                     , ("this", THIS)

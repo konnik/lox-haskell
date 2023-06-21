@@ -44,6 +44,7 @@ data TokenType
   | NIL
   | OR
   | PRINT
+  | SHOW
   | RETURN
   | SUPER
   | THIS
