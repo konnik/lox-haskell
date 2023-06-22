@@ -110,6 +110,32 @@ parse tokens = do
     snd $ runParser program tokens
 
 {- |
+    Selects one of many possible parsers based on the next token (matched token is not consumed).
+    If no choice matches then the fallback parser is used.
+-}
+choice :: [(TokenType, Parser a)] -> Parser a -> Parser a
+choice choices fallback = peek >>= loop choices
+  where
+    loop [] _ = fallback
+    loop ((tokenType, currChoice) : rest) nextToken =
+        if tokenType == nextToken.type_
+            then currChoice
+            else loop rest nextToken
+
+{- |
+    Selects one of many possible parsers based on the next token (matched token IS consumed).
+    If no choice matches then the fallback parser is used.
+-}
+choiceMatch :: [(TokenType, Parser a)] -> Parser a -> Parser a
+choiceMatch choices fallback = peek >>= loop choices
+  where
+    loop [] _ = fallback
+    loop ((tokenType, currChoice) : rest) nextToken =
+        if tokenType == nextToken.type_
+            then skip >> currChoice
+            else loop rest nextToken
+
+{- |
 Fails the parsing with an error message.
 -}
 parseError :: Token -> String -> Parser a
@@ -158,19 +184,6 @@ statement = do
         , (LEFT_BRACE, blockStatement)
         ]
         expressionStatement
-
-{- |
-    Selects one of many possible parsers based on the next token.
-    If no choice matches then the fallback parser is used.
--}
-choice :: [(TokenType, Parser a)] -> Parser a -> Parser a
-choice choices fallback = peek >>= loop choices
-  where
-    loop [] _ = fallback
-    loop ((tokenType, currChoice) : rest) nextToken =
-        if tokenType == nextToken.type_
-            then currChoice
-            else loop rest nextToken
 
 forStatement :: Parser Stmt
 forStatement = do
@@ -239,26 +252,21 @@ ifStatement = do
     condExpr <- expression
     expect_ RIGHT_PAREN
     thenStmt <- statement
-
-    hasElse <- match ELSE
-    if hasElse
-        then do
-            elseStmt <- statement
-            pure $ StmtIf condExpr thenStmt (Just elseStmt)
-        else pure $ StmtIf condExpr thenStmt Nothing
+    choiceMatch
+        [ (ELSE, statement >>= pure . StmtIf condExpr thenStmt . Just)
+        ]
+        $ pure (StmtIf condExpr thenStmt Nothing)
 
 blockStatement :: Parser Stmt
-blockStatement = do
-    expect_ LEFT_BRACE
-    loop []
+blockStatement = expect_ LEFT_BRACE >> zeroOrMoreStmts []
   where
-    loop :: [Stmt] -> Parser Stmt
-    loop stmts = do
+    zeroOrMoreStmts :: [Stmt] -> Parser Stmt
+    zeroOrMoreStmts stmts = do
         endOfBlock <- check RIGHT_BRACE
         if not endOfBlock
             then do
                 innerStmt <- declaration
-                loop (stmts ++ [innerStmt])
+                zeroOrMoreStmts (stmts ++ [innerStmt])
             else do
                 skip
                 pure $ StmtBlock stmts
@@ -294,43 +302,33 @@ assignment = do
         else pure targetExpr
 
 logicOr :: Parser Expr
-logicOr = do
-    expr <- logicAnd
-    logicOrLoop expr
-
-logicOrLoop :: Expr -> Parser Expr
-logicOrLoop expr = do
-    isOr <- match OR
-    if isOr
-        then do
-            expr2 <- logicAnd
-            logicOrLoop (Logic LogicOr expr expr2)
-        else do
-            pure expr
+logicOr = logicAnd >>= logicOrLoop
+  where
+    logicOrLoop :: Expr -> Parser Expr
+    logicOrLoop expr =
+        choiceMatch
+            [ (OR, logicAnd >>= logicOrLoop . (Logic LogicOr expr))
+            ]
+            $ pure expr
 
 logicAnd :: Parser Expr
-logicAnd = do
-    expr <- equality
-    logicAndLoop expr
-
-logicAndLoop :: Expr -> Parser Expr
-logicAndLoop expr = do
-    isAnd <- match AND
-    if isAnd
-        then do
-            expr2 <- equality
-            logicAndLoop (Logic LogicAnd expr expr2)
-        else do
-            pure expr
+logicAnd = equality >>= logicAndLoop
+  where
+    logicAndLoop :: Expr -> Parser Expr
+    logicAndLoop expr = do
+        choiceMatch
+            [ (AND, equality >>= logicAndLoop . Logic LogicAnd expr)
+            ]
+            $ pure expr
 
 equality :: Parser Expr
 equality = comparison >>= equalityLoop
   where
     equalityLoop :: Expr -> Parser Expr
     equalityLoop lhs =
-        choice
-            [ (BANG_EQUAL, skip >> comparison >>= equalityLoop . Binary NotEqual lhs)
-            , (EQUAL_EQUAL, skip >> comparison >>= equalityLoop . Binary Equal lhs)
+        choiceMatch
+            [ (BANG_EQUAL, comparison >>= equalityLoop . Binary NotEqual lhs)
+            , (EQUAL_EQUAL, comparison >>= equalityLoop . Binary Equal lhs)
             ]
             $ pure lhs
 
@@ -339,11 +337,11 @@ comparison = term >>= comparisonLoop
 
 comparisonLoop :: Expr -> Parser Expr
 comparisonLoop lhs =
-    choice
-        [ (GREATER, skip >> term >>= comparisonLoop . Binary GreaterThan lhs)
-        , (GREATER_EQUAL, skip >> term >>= comparisonLoop . Binary GreaterOrEqual lhs)
-        , (LESS, skip >> term >>= comparisonLoop . Binary LessThan lhs)
-        , (LESS_EQUAL, skip >> term >>= comparisonLoop . Binary LessOrEqual lhs)
+    choiceMatch
+        [ (GREATER, term >>= comparisonLoop . Binary GreaterThan lhs)
+        , (GREATER_EQUAL, term >>= comparisonLoop . Binary GreaterOrEqual lhs)
+        , (LESS, term >>= comparisonLoop . Binary LessThan lhs)
+        , (LESS_EQUAL, term >>= comparisonLoop . Binary LessOrEqual lhs)
         ]
         $ pure lhs
 
@@ -352,9 +350,9 @@ term = factor >>= termLoop
   where
     termLoop :: Expr -> Parser Expr
     termLoop lhs =
-        choice
-            [ (MINUS, skip >> factor >>= termLoop . Binary Subtraction lhs)
-            , (PLUS, skip >> factor >>= termLoop . Binary Addition lhs)
+        choiceMatch
+            [ (MINUS, factor >>= termLoop . Binary Subtraction lhs)
+            , (PLUS, factor >>= termLoop . Binary Addition lhs)
             ]
             $ pure lhs
 
@@ -363,18 +361,18 @@ factor = unary >>= factorLoop
   where
     factorLoop :: Expr -> Parser Expr
     factorLoop lhs =
-        choice
-            [ (SLASH, skip >> unary >>= factorLoop . Binary Division lhs)
-            , (STAR, skip >> unary >>= factorLoop . Binary Multiplication lhs)
+        choiceMatch
+            [ (SLASH, unary >>= factorLoop . Binary Division lhs)
+            , (STAR, unary >>= factorLoop . Binary Multiplication lhs)
             ]
             $ pure lhs
 
 unary :: Parser Expr
 unary = do
-    choice
-        [ (BANG, Unary Not <$> (skip >> unary))
-        , (MINUS, Unary Negate <$> (skip >> unary))
-        , (SHOW, Unary Show <$> (skip >> unary))
+    choiceMatch
+        [ (BANG, Unary Not <$> unary)
+        , (MINUS, Unary Negate <$> unary)
+        , (SHOW, Unary Show <$> unary)
         ]
         primary
 
