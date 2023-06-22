@@ -236,14 +236,14 @@ forStatement = do
             $ Just <$> expression
 
 whileStatement :: Parser Stmt
-whileStatement = do
-    expect_ WHILE
-    expect_ LEFT_PAREN
-    condExpr <- expression
-    expect_ RIGHT_PAREN
-    stmt <- statement
-
-    pure $ StmtWhile condExpr stmt
+whileStatement =
+    -- Experimenting with applicatiove syntax, don't know if I like it... :-)
+    pure StmtWhile
+        <* expect WHILE
+        <* expect LEFT_PAREN
+        <*> expression
+        <* expect RIGHT_PAREN
+        <*> statement
 
 ifStatement :: Parser Stmt
 ifStatement = do
