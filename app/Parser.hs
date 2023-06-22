@@ -7,6 +7,7 @@ module Parser (
 ) where
 
 import Ast
+import Data.Maybe (catMaybes, fromMaybe)
 import Token (Token (..), TokenType (..))
 
 newtype Parser a = Parser {runParser :: [Token] -> ([Token], Either String a)}
@@ -166,9 +167,58 @@ statement = do
     case next.type_ of
         IF -> ifStatement
         WHILE -> whileStatement
+        FOR -> forStatement
         PRINT -> printStatement
         LEFT_BRACE -> skip >> blockStatement []
         _ -> expressionStatement
+
+forStatement :: Parser Stmt
+forStatement = do
+    expect_ FOR
+    expect_ LEFT_PAREN
+
+    maybeInit <- forInitalizer
+    condition <- fromMaybe (Literal LiteralTrue) <$> forCondition
+    expect_ SEMICOLON
+    maybeIncr <- forIncrement
+    expect_ RIGHT_PAREN
+    forBody <- statement
+
+    let desugaredWhileBody =
+            StmtBlock $
+                catMaybes
+                    [ Just forBody
+                    , StmtExpr <$> maybeIncr
+                    ]
+    let desugaredWhile =
+            StmtBlock $
+                catMaybes
+                    [ maybeInit
+                    , Just $ StmtWhile condition desugaredWhileBody
+                    ]
+    pure desugaredWhile
+  where
+    forInitalizer :: Parser (Maybe Stmt)
+    forInitalizer = do
+        next <- peek
+        case next.type_ of
+            SEMICOLON -> skip >> pure Nothing
+            VAR -> Just <$> varDeclaration
+            _ -> Just <$> expressionStatement
+
+    forCondition :: Parser (Maybe Expr)
+    forCondition = do
+        next <- peek
+        case next.type_ of
+            SEMICOLON -> pure Nothing
+            _ -> Just <$> expression
+
+    forIncrement :: Parser (Maybe Expr)
+    forIncrement = do
+        next <- peek
+        case next.type_ of
+            RIGHT_PAREN -> pure Nothing
+            _ -> Just <$> expression
 
 whileStatement :: Parser Stmt
 whileStatement = do

@@ -1,8 +1,12 @@
-var str = "";
-var count = 0;
-while (str != "xxxxxxxxxx") {
-    str = str + "x";
-    print str;
-    count = count +1;
+var count = 15;
+var previous = 0;
+var current = 1;
+
+for (var i=1; i <= count; i = i + 1) {
+  print "Fibonacci number " + show i + " is " + show current + ".";
+
+  // Calculate the next Fibonacci number
+  var next = previous + current;
+  previous = current;
+  current = next;
 }
-print "Antal varv: " + show count;
