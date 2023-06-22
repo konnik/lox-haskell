@@ -1,4 +1,4 @@
-var count = 15;
+var count = 5;
 var previous = 0;
 var current = 1;
 
@@ -10,3 +10,14 @@ for (var i=1; i <= count; i = i + 1) {
   previous = current;
   current = next;
 }
+
+var q = 1;
+var korv = true;
+while (korv) {
+    print "In while loop...";
+    
+    q = q + 1;
+    if (q>2) 
+        korv = false;
+}
+
