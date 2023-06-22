@@ -3,7 +3,7 @@
 
 module Parser (
     parse,
-    Parser (..),
+    Parser,
 ) where
 
 import Ast
@@ -105,19 +105,6 @@ advance = Parser $ \tokens ->
         [] -> unexpectedEndOfFile
         t : tokens' -> (tokens', Right t)
 
-{-
-Lox Grammar:
-
-expression     → equality ;
-equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-term           → factor ( ( "-" | "+" ) factor )* ;
-factor         → unary ( ( "/" | "*" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-               | primary ;
-primary        → NUMBER | STRING | "true" | "false" | "nil"
-               | "(" expression ")" ;
--}
 parse :: [Token] -> Either String [Stmt]
 parse tokens = do
     snd $ runParser program tokens
@@ -177,8 +164,7 @@ statement = do
     If no choice matches then the fallback parser is used.
 -}
 choice :: [(TokenType, Parser a)] -> Parser a -> Parser a
-choice choices fallback = do
-    peek >>= loop choices
+choice choices fallback = peek >>= loop choices
   where
     loop [] _ = fallback
     loop ((tokenType, currChoice) : rest) nextToken =
@@ -338,97 +324,59 @@ logicAndLoop expr = do
             pure expr
 
 equality :: Parser Expr
-equality = do
-    expr <- comparison
-    equalityLoop expr
-
-equalityLoop :: Expr -> Parser Expr
-equalityLoop lhs = do
-    next <- peek
-    case next.type_ of
-        BANG_EQUAL -> do
-            skip
-            rhs <- comparison
-            equalityLoop $ Binary NotEqual lhs rhs
-        EQUAL_EQUAL -> do
-            skip
-            rhs <- comparison
-            equalityLoop $ Binary Equal lhs rhs
-        _ -> pure lhs
+equality = comparison >>= equalityLoop
+  where
+    equalityLoop :: Expr -> Parser Expr
+    equalityLoop lhs =
+        choice
+            [ (BANG_EQUAL, skip >> comparison >>= equalityLoop . Binary NotEqual lhs)
+            , (EQUAL_EQUAL, skip >> comparison >>= equalityLoop . Binary Equal lhs)
+            ]
+            $ pure lhs
 
 comparison :: Parser Expr
-comparison = do
-    expr <- term
-    comparisonLoop expr
+comparison = term >>= comparisonLoop
 
 comparisonLoop :: Expr -> Parser Expr
-comparisonLoop lhs = do
-    next <- peek
-    case next.type_ of
-        GREATER -> do
-            skip
-            rhs <- term
-            comparisonLoop $ Binary GreaterThan lhs rhs
-        GREATER_EQUAL -> do
-            skip
-            rhs <- term
-            comparisonLoop $ Binary GreaterOrEqual lhs rhs
-        LESS -> do
-            skip
-            rhs <- term
-            comparisonLoop $ Binary LessThan lhs rhs
-        LESS_EQUAL -> do
-            skip
-            rhs <- term
-            comparisonLoop $ Binary LessOrEqual lhs rhs
-        _ -> pure lhs
+comparisonLoop lhs =
+    choice
+        [ (GREATER, skip >> term >>= comparisonLoop . Binary GreaterThan lhs)
+        , (GREATER_EQUAL, skip >> term >>= comparisonLoop . Binary GreaterOrEqual lhs)
+        , (LESS, skip >> term >>= comparisonLoop . Binary LessThan lhs)
+        , (LESS_EQUAL, skip >> term >>= comparisonLoop . Binary LessOrEqual lhs)
+        ]
+        $ pure lhs
 
 term :: Parser Expr
-term = do
-    expr <- factor
-    termLoop expr
-
-termLoop :: Expr -> Parser Expr
-termLoop lhs = do
-    next <- peek
-    case next.type_ of
-        MINUS -> do
-            skip
-            rhs <- factor
-            termLoop $ Binary Subtraction lhs rhs
-        PLUS -> do
-            skip
-            rhs <- factor
-            termLoop $ Binary Addition lhs rhs
-        _ -> pure lhs
+term = factor >>= termLoop
+  where
+    termLoop :: Expr -> Parser Expr
+    termLoop lhs =
+        choice
+            [ (MINUS, skip >> factor >>= termLoop . Binary Subtraction lhs)
+            , (PLUS, skip >> factor >>= termLoop . Binary Addition lhs)
+            ]
+            $ pure lhs
 
 factor :: Parser Expr
-factor = do
-    expr <- unary
-    factorLoop expr
-
-factorLoop :: Expr -> Parser Expr
-factorLoop lhs = do
-    next <- peek
-    case next.type_ of
-        SLASH -> do
-            skip
-            rhs <- unary
-            factorLoop $ Binary Division lhs rhs
-        STAR -> do
-            skip
-            rhs <- unary
-            factorLoop $ Binary Multiplication lhs rhs
-        _ -> pure lhs
+factor = unary >>= factorLoop
+  where
+    factorLoop :: Expr -> Parser Expr
+    factorLoop lhs =
+        choice
+            [ (SLASH, skip >> unary >>= factorLoop . Binary Division lhs)
+            , (STAR, skip >> unary >>= factorLoop . Binary Multiplication lhs)
+            ]
+            $ pure lhs
 
 unary :: Parser Expr
 unary = do
-    next <- peek
-    case next.type_ of
-        BANG -> Unary Not <$> (skip >> unary)
-        MINUS -> Unary Negate <$> (skip >> unary)
-        SHOW -> Unary Show <$> (skip >> unary)
-        _ -> primary
+    choice
+        [ (BANG, Unary Not <$> (skip >> unary))
+        , (MINUS, Unary Negate <$> (skip >> unary))
+        , (SHOW, Unary Show <$> (skip >> unary))
+        ]
+        primary
 
 primary :: Parser Expr
 primary = do
