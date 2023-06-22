@@ -163,14 +163,28 @@ varDeclaration = do
 
 statement :: Parser Stmt
 statement = do
-    next <- peek
-    case next.type_ of
-        IF -> ifStatement
-        WHILE -> whileStatement
-        FOR -> forStatement
-        PRINT -> printStatement
-        LEFT_BRACE -> skip >> blockStatement []
-        _ -> expressionStatement
+    choice
+        [ (IF, ifStatement)
+        , (WHILE, whileStatement)
+        , (FOR, forStatement)
+        , (PRINT, printStatement)
+        , (LEFT_BRACE, blockStatement)
+        ]
+        expressionStatement
+
+{- |
+    Selects one of many possible parsers based on the next token.
+    If no choice matches then the fallback parser is used.
+-}
+choice :: [(TokenType, Parser a)] -> Parser a -> Parser a
+choice choices fallback = do
+    peek >>= loop choices
+  where
+    loop [] _ = fallback
+    loop ((tokenType, currChoice) : rest) nextToken =
+        if tokenType == nextToken.type_
+            then currChoice
+            else loop rest nextToken
 
 forStatement :: Parser Stmt
 forStatement = do
@@ -178,7 +192,7 @@ forStatement = do
     expect_ LEFT_PAREN
 
     maybeInit <- forInitalizer
-    condition <- fromMaybe (Literal LiteralTrue) <$> forCondition
+    condition <- forCondition
     expect_ SEMICOLON
     maybeIncr <- forIncrement
     expect_ RIGHT_PAREN
@@ -199,26 +213,28 @@ forStatement = do
     pure desugaredWhile
   where
     forInitalizer :: Parser (Maybe Stmt)
-    forInitalizer = do
-        next <- peek
-        case next.type_ of
-            SEMICOLON -> skip >> pure Nothing
-            VAR -> Just <$> varDeclaration
-            _ -> Just <$> expressionStatement
+    forInitalizer =
+        choice
+            [ (SEMICOLON, skip >> pure Nothing)
+            , (VAR, Just <$> varDeclaration)
+            ]
+            $ Just <$> expressionStatement
 
-    forCondition :: Parser (Maybe Expr)
-    forCondition = do
-        next <- peek
-        case next.type_ of
-            SEMICOLON -> pure Nothing
-            _ -> Just <$> expression
+    forCondition :: Parser Expr
+    forCondition = fromMaybe (Literal LiteralTrue) <$> maybeCond
+      where
+        maybeCond =
+            choice
+                [ (SEMICOLON, pure Nothing)
+                ]
+                $ Just <$> expression
 
     forIncrement :: Parser (Maybe Expr)
-    forIncrement = do
-        next <- peek
-        case next.type_ of
-            RIGHT_PAREN -> pure Nothing
-            _ -> Just <$> expression
+    forIncrement =
+        choice
+            [ (RIGHT_PAREN, pure Nothing)
+            ]
+            $ Just <$> expression
 
 whileStatement :: Parser Stmt
 whileStatement = do
@@ -245,16 +261,21 @@ ifStatement = do
             pure $ StmtIf condExpr thenStmt (Just elseStmt)
         else pure $ StmtIf condExpr thenStmt Nothing
 
-blockStatement :: [Stmt] -> Parser Stmt
-blockStatement stmts = do
-    endOfBlock <- check RIGHT_BRACE
-    if not endOfBlock
-        then do
-            innerStmt <- declaration
-            blockStatement (stmts ++ [innerStmt])
-        else do
-            skip
-            pure $ StmtBlock stmts
+blockStatement :: Parser Stmt
+blockStatement = do
+    expect_ LEFT_BRACE
+    loop []
+  where
+    loop :: [Stmt] -> Parser Stmt
+    loop stmts = do
+        endOfBlock <- check RIGHT_BRACE
+        if not endOfBlock
+            then do
+                innerStmt <- declaration
+                loop (stmts ++ [innerStmt])
+            else do
+                skip
+                pure $ StmtBlock stmts
 
 printStatement :: Parser Stmt
 printStatement = do
