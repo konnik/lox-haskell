@@ -15,8 +15,9 @@ var q = 1;
 var korv = true;
 while (korv) {
     print "In while loop...";
-    
     q = q + 1;
+
+    var apa = "korv";
     if (q>2) 
         korv = false;
 }

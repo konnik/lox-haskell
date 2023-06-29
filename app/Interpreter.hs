@@ -9,16 +9,23 @@ import Value qualified
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State (StateT, get, gets, modify, put, runStateT)
 
 type Interpreter m a = ExceptT String (StateT Environment m) a
 
 run :: [Stmt] -> IO ()
 run stmts = do
-    (result, _) <- runStateT (runExceptT (runWithEnv stmts)) Environment.newEnvironment
+    (result, env) <- runStateT (runExceptT (runWithEnv stmts)) Environment.newEnvironment
     case result of
         Right _ -> pure ()
-        Left err -> putStrLn ("Runtime error: " <> err)
+        Left err -> do
+            putStrLn ""
+            putStrLn ""
+            putStrLn "RUNTIME ERROR!!!"
+            putStrLn err
+            putStrLn ""
+            Environment.printEnv env
+            putStrLn ""
 
 runWithEnv :: (MonadIO m) => [Stmt] -> Interpreter m ()
 runWithEnv stmts = do
@@ -29,8 +36,7 @@ runWithEnv stmts = do
             runWithEnv rest
 
 runtimeError :: (Monad m) => String -> Interpreter m a
-runtimeError msg = do
-    throwE msg
+runtimeError msg = throwE msg
 
 runStmt :: (MonadIO m) => Stmt -> Interpreter m ()
 runStmt stmt = do
