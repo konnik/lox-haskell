@@ -11,6 +11,9 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
 import Control.Monad.Trans.State (StateT, get, gets, modify, put, runStateT)
 
+-- TODO Read this article again and decide if this monad stack (StateT / ExceptT over IO)
+-- really is the best design.... :-)
+-- https://www.fpcomplete.com/blog/2017/06/readert-design-pattern/
 type Interpreter m a = ExceptT String (StateT Environment m) a
 
 run :: [Stmt] -> IO ()
