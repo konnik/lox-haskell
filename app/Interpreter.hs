@@ -1,4 +1,4 @@
-module Interpreter where
+module Interpreter (run) where
 
 import Ast
 import Environment (Environment)
@@ -7,78 +7,76 @@ import Value (Value (..))
 import Value qualified
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
 import Control.Monad.Trans.State
 
-type Interpreter m a = StateT Environment m a
+type Interpreter m a = ExceptT String (StateT Environment m) a
 
 run :: [Stmt] -> IO ()
 run stmts = do
-    _ <- runStateT (runWithEnv stmts) Environment.newEnvironment
-    pure ()
+    (result, _) <- runStateT (runExceptT (runWithEnv stmts)) Environment.newEnvironment
+    case result of
+        Right _ -> pure ()
+        Left err -> putStrLn ("Runtime error: " <> err)
 
 runWithEnv :: (MonadIO m) => [Stmt] -> Interpreter m ()
 runWithEnv stmts = do
     case stmts of
         [] -> pure ()
         stmt : rest -> do
-            result <- runStmt stmt
-            case result of
-                Right () ->
-                    runWithEnv rest
-                Left err -> do
-                    liftIO (putStrLn $ "Runtime error: " ++ err)
+            runStmt stmt
+            runWithEnv rest
 
-runtimeError :: (Monad m) => String -> Interpreter m (Either String a)
-runtimeError msg = pure $ Left msg
+runtimeError :: (Monad m) => String -> Interpreter m a
+runtimeError msg = do
+    throwE msg
 
-withValue :: (Monad m) => Expr -> (Value -> Interpreter m b) -> Interpreter m (Either String b)
-withValue expr f = do
-    result <- eval expr
-    case result of
-        Right a -> pure <$> f a
-        Left err -> pure $ Left err
-
-withValue2 :: (Monad m) => Expr -> (Value -> Interpreter m (Either String b)) -> Interpreter m (Either String b)
-withValue2 expr f = do
-    result <- eval expr
-    case result of
-        Right a -> f a
-        Left err -> pure $ Left err
-
-runStmt :: (MonadIO m) => Stmt -> Interpreter m (Either String ())
+runStmt :: (MonadIO m) => Stmt -> Interpreter m ()
 runStmt stmt = do
     case stmt of
-        StmtPrint expr -> withValue expr $ \value ->
-            liftIO $ putStrLn $ Value.toString value
-        StmtExpr expr -> withValue expr $ \_ ->
-            pure ()
-        StmtVarDecl name initExpr -> withValue initExpr $ \value ->
-            modify $ Environment.declareVar name value
-        StmtBlock stmts -> do
-            modify Environment.enterBlock
-            runWithEnv stmts
-            modify Environment.leaveBlock
-            pure $ pure ()
-        StmtIf cond thenStmt maybeElseStmt -> withValue2 cond $ \condValue ->
-            if isTruthy condValue
-                then runStmt thenStmt
-                else case maybeElseStmt of
-                    Just elseStmt -> runStmt elseStmt
-                    Nothing -> pure $ pure ()
+        StmtPrint expr -> runPrintStmt expr
+        StmtExpr expr -> eval expr >> pure ()
+        StmtVarDecl name initExpr -> runVarDeclStmt name initExpr
+        StmtBlock stmts -> runBlock stmts
+        StmtIf cond thenStmt maybeElseStmt -> runIfStmt cond thenStmt maybeElseStmt
         StmtWhile cond whileStmt -> runWhileStmt cond whileStmt
 
-runWhileStmt :: (MonadIO m) => Expr -> Stmt -> Interpreter m (Either String ())
-runWhileStmt cond whileStmt = withValue2 cond $ \condValue ->
+runVarDeclStmt :: (MonadIO m) => String -> Expr -> Interpreter m ()
+runVarDeclStmt name initExpr = do
+    value <- eval initExpr
+    lift $ modify $ Environment.declareVar name value
+
+runPrintStmt :: (MonadIO m) => Expr -> Interpreter m ()
+runPrintStmt expr = do
+    value <- eval expr
+    liftIO $ putStrLn $ Value.toString value
+
+runBlock :: (MonadIO m) => [Stmt] -> Interpreter m ()
+runBlock stmts = do
+    lift $ modify Environment.enterBlock
+    runWithEnv stmts
+    lift $ modify Environment.leaveBlock
+    pure ()
+
+runIfStmt :: (MonadIO m) => Expr -> Stmt -> Maybe Stmt -> Interpreter m ()
+runIfStmt cond thenStmt maybeElseStmt = do
+    condValue <- eval cond
+    case (isTruthy condValue, maybeElseStmt) of
+        (True, _) -> runStmt thenStmt
+        (False, Just elseStmt) -> runStmt elseStmt
+        (False, Nothing) -> pure ()
+
+runWhileStmt :: (MonadIO m) => Expr -> Stmt -> Interpreter m ()
+runWhileStmt cond whileStmt = do
+    condValue <- eval cond
     if isTruthy condValue
         then do
-            result <- runStmt whileStmt
-            case result of
-                Right () -> do
-                    runWhileStmt cond whileStmt
-                Left err -> runtimeError err
-        else pure $ pure ()
+            runStmt whileStmt
+            runWhileStmt cond whileStmt
+        else pure ()
 
-eval :: (Monad m) => Expr -> Interpreter m (Either String Value)
+eval :: (Monad m) => Expr -> Interpreter m Value
 eval expr =
     case expr of
         Literal litval -> evalLiteral litval
@@ -89,77 +87,80 @@ eval expr =
         Assignment name valueExpr -> evalAssignment name valueExpr
         Logic op lhs rhs -> evalLogic op lhs rhs
 
-evalLogic :: (Monad m) => LogicOp -> Expr -> Expr -> Interpreter m (Either String Value)
+evalLogic :: (Monad m) => LogicOp -> Expr -> Expr -> Interpreter m Value
 evalLogic op lhs rhs =
     case op of
-        LogicAnd -> withValue2 lhs $ \lhsVal ->
+        LogicAnd -> do
+            lhsVal <- eval lhs
             if isTruthy lhsVal
                 then eval rhs
-                else pure $ pure lhsVal
-        LogicOr -> withValue2 lhs $ \lhsVal ->
-            if isTruthy lhsVal
-                then pure $ pure lhsVal
-                else eval rhs
+                else pure lhsVal
+        LogicOr -> do
+            lhsVal <- eval lhs
+            if isFalsy lhsVal
+                then eval rhs
+                else pure lhsVal
 
-evalAssignment :: (Monad m) => String -> Expr -> Interpreter m (Either String Value)
+evalAssignment :: (Monad m) => String -> Expr -> Interpreter m Value
 evalAssignment name expr = do
-    result <- eval expr
-    case result of
+    value <- eval expr
+    env <- lift get
+    case Environment.setVar name value env of
         Left err -> runtimeError err
-        Right value -> do
-            env <- get
-            case Environment.setVar name value env of
-                Left err -> runtimeError err
-                Right env' -> do
-                    put env'
-                    pure $ pure value
+        Right env' -> do
+            lift $ put env'
+            pure $ value
 
-evalVariable :: (Monad m) => String -> Interpreter m (Either String Value)
-evalVariable name = gets $ Environment.getVar name
+evalVariable :: (Monad m) => String -> Interpreter m Value
+evalVariable name = do
+    result <- lift $ gets $ Environment.getVar name
+    case result of
+        Right val -> pure val
+        Left err -> runtimeError err
 
-evalBinary :: (Monad m) => BinaryOp -> Expr -> Expr -> Interpreter m (Either String Value)
+evalBinary :: (Monad m) => BinaryOp -> Expr -> Expr -> Interpreter m Value
 evalBinary op lhs rhs = do
-    withValue2 lhs $ \leftVal ->
-        withValue2 rhs $ \rightVal ->
-            case op of
-                Addition -> evalAdditionOrStringConcatination leftVal rightVal
-                Subtraction -> evalArithmetic (-) leftVal rightVal
-                Multiplication -> evalArithmetic (*) leftVal rightVal
-                Division -> safeDivision leftVal rightVal
-                LessOrEqual -> evalComparison (<=) leftVal rightVal
-                LessThan -> evalComparison (<) leftVal rightVal
-                GreaterOrEqual -> evalComparison (>=) leftVal rightVal
-                GreaterThan -> evalComparison (>) leftVal rightVal
-                Equal -> evalEqual id leftVal rightVal
-                NotEqual -> evalEqual not leftVal rightVal
+    leftVal <- eval lhs
+    rightVal <- eval rhs
+    case op of
+        Addition -> evalAdditionOrStringConcatination leftVal rightVal
+        Subtraction -> evalArithmetic (-) leftVal rightVal
+        Multiplication -> evalArithmetic (*) leftVal rightVal
+        Division -> safeDivision leftVal rightVal
+        LessOrEqual -> evalComparison (<=) leftVal rightVal
+        LessThan -> evalComparison (<) leftVal rightVal
+        GreaterOrEqual -> evalComparison (>=) leftVal rightVal
+        GreaterThan -> evalComparison (>) leftVal rightVal
+        Equal -> evalEqual id leftVal rightVal
+        NotEqual -> evalEqual not leftVal rightVal
 
-safeDivision :: (Monad m) => Value -> Value -> Interpreter m (Either String Value)
+safeDivision :: (Monad m) => Value -> Value -> Interpreter m Value
 safeDivision lhs rhs = case rhs of
     NumVal 0 -> runtimeError "Division by zero."
     _ -> evalArithmetic ((/)) lhs rhs
 
-evalAdditionOrStringConcatination :: (Monad m) => Value -> Value -> Interpreter m (Either String Value)
+evalAdditionOrStringConcatination :: (Monad m) => Value -> Value -> Interpreter m Value
 evalAdditionOrStringConcatination lhs rhs =
     case (lhs, rhs) of
         (NumVal _, NumVal _) -> evalArithmetic (+) lhs rhs
-        (StrVal a, StrVal b) -> pure $ pure $ StrVal (a ++ b)
+        (StrVal a, StrVal b) -> pure $ StrVal (a ++ b)
         _ -> runtimeError $ "Plus operator can only be used on two numbers or two strings. " ++ show (lhs, rhs)
 
-evalArithmetic :: (Monad m) => (Float -> Float -> Float) -> Value -> Value -> Interpreter m (Either String Value)
+evalArithmetic :: (Monad m) => (Float -> Float -> Float) -> Value -> Value -> Interpreter m Value
 evalArithmetic func lhs rhs =
     case (lhs, rhs) of
-        (NumVal a, NumVal b) -> pure $ pure $ NumVal (func a b)
+        (NumVal a, NumVal b) -> pure $ NumVal (func a b)
         _ -> runtimeError $ "Arithmetic operations is only allowed betweeen two numbers. " ++ show (lhs, rhs)
 
-evalComparison :: (Monad m) => (Float -> Float -> Bool) -> Value -> Value -> Interpreter m (Either String Value)
+evalComparison :: (Monad m) => (Float -> Float -> Bool) -> Value -> Value -> Interpreter m Value
 evalComparison comparison lhs rhs =
     case (lhs, rhs) of
-        (NumVal a, NumVal b) -> pure $ pure $ BoolVal (comparison a b)
+        (NumVal a, NumVal b) -> pure $ BoolVal (comparison a b)
         _ -> runtimeError $ "Only two numbers can be compared." ++ show (lhs, rhs)
 
-evalEqual :: (Monad m) => (Bool -> Bool) -> Value -> Value -> Interpreter m (Either String Value)
+evalEqual :: (Monad m) => (Bool -> Bool) -> Value -> Value -> Interpreter m Value
 evalEqual modifier lhs rhs =
-    pure $ pure $ BoolVal $ modifier $ case (lhs, rhs) of
+    pure $ BoolVal $ modifier $ case (lhs, rhs) of
         (NilVal, NilVal) -> True
         (NilVal, _) -> False
         (_, NilVal) -> False
@@ -168,23 +169,23 @@ evalEqual modifier lhs rhs =
         (BoolVal a, BoolVal b) -> (a == b)
         _ -> False
 
-evalUnary :: (Monad m) => UnaryOp -> Expr -> Interpreter m (Either String Value)
+evalUnary :: (Monad m) => UnaryOp -> Expr -> Interpreter m Value
 evalUnary op expr = do
-    withValue2 expr $ \val ->
-        case (op, val) of
-            (Negate, NumVal n) -> pure $ pure $ NumVal (-n)
-            (Not, _) -> pure $ pure $ BoolVal (not (isTruthy val))
-            (Show, v) -> pure $ pure $ StrVal (Value.toString v)
-            (Negate, _) -> runtimeError $ "Only numbers kan be negated."
+    val <- eval expr
+    case (op, val) of
+        (Negate, NumVal n) -> pure $ NumVal (-n)
+        (Not, _) -> pure $ BoolVal (not (isTruthy val))
+        (Show, v) -> pure $ StrVal (Value.toString v)
+        (Negate, _) -> runtimeError $ "Only numbers kan be negated."
 
-evalLiteral :: (Monad m) => LiteralValue -> Interpreter m (Either String Value)
+evalLiteral :: (Monad m) => LiteralValue -> Interpreter m Value
 evalLiteral litval =
     case litval of
-        LiteralString val -> pure $ pure $ StrVal val
-        LiteralNumber val -> pure $ pure $ NumVal val
-        LiteralTrue -> pure $ pure $ BoolVal True
-        LiteralFalse -> pure $ pure $ BoolVal False
-        LiteralNil -> pure $ pure $ NilVal
+        LiteralString val -> pure $ StrVal val
+        LiteralNumber val -> pure $ NumVal val
+        LiteralTrue -> pure $ BoolVal True
+        LiteralFalse -> pure $ BoolVal False
+        LiteralNil -> pure $ NilVal
 
 isTruthy :: Value -> Bool
 isTruthy val =
