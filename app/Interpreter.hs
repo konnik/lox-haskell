@@ -15,6 +15,7 @@ import Control.Monad.Trans.State (StateT, get, gets, modify, put, runStateT)
 -- really is the best design.... :-)
 -- https://www.fpcomplete.com/blog/2017/06/readert-design-pattern/
 -- https://www.fpcomplete.com/blog/2016/11/exceptions-best-practices-haskell/
+-- https://www.tweag.io/blog/2020-04-16-exceptions-in-haskell/
 type Interpreter m a = ExceptT String (StateT Environment m) a
 
 run :: [Stmt] -> IO ()
