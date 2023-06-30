@@ -85,9 +85,9 @@ Results in an error of topken does not match.
 -}
 expect :: TokenType -> String -> Parser Token
 expect tokenType description = do
-    next <- advance
+    next <- peek
     if next.type_ == tokenType
-        then pure next
+        then skip >> pure next
         else parseError next $ description
 
 expect_ :: TokenType -> String -> Parser ()
@@ -206,10 +206,50 @@ program = do
 
 declaration :: Parser Stmt
 declaration = do
-    isVar <- check VAR
-    if isVar
-        then varDeclaration
-        else statement
+    isEof <- check EOF
+    if isEof
+        then exitParser
+        else do
+            isVar <- check VAR
+            recoverParseError synchronize $ do
+                if isVar
+                    then varDeclaration
+                    else statement
+
+exitParser :: Parser a
+exitParser = Parser $ \tokens ->
+    (tokens, [], Nothing)
+
+synchronize :: Parser Stmt
+synchronize = do
+    next <- peek
+    if next.type_ == SEMICOLON
+        then do
+            skip
+            declaration
+        else case next.type_ of
+            EOF -> exitParser
+            CLASS -> declaration
+            FUN -> declaration
+            VAR -> declaration
+            FOR -> declaration
+            IF -> declaration
+            WHILE -> declaration
+            PRINT -> declaration
+            RETURN -> declaration
+            _ -> skip >> synchronize
+
+recoverParseError :: Parser a -> Parser a -> Parser a
+recoverParseError fallback parser = Parser $ \tokens ->
+    case runParser parser tokens of
+        (tokens', errors', Just a) -> (tokens', errors', Just a)
+        ([], errors', Nothing) -> ([], errors', Nothing)
+        (t : tokens', errors', Nothing) ->
+            if t.type_ == EOF
+                then ([t], errors', Nothing)
+                else case runParser fallback (t : tokens') of
+                    (tokens'', errors'', Just a'') -> (tokens'', errors' ++ errors'', Just a'')
+                    (tokens'', errors'', Nothing) -> (tokens'', errors' ++ errors'', Nothing)
 
 varDeclaration :: Parser Stmt
 varDeclaration = do
@@ -332,7 +372,7 @@ printStatement = do
 expressionStatement :: Parser Stmt
 expressionStatement = do
     expr <- expression
-    expect_ SEMICOLON "expect semi"
+    expect_ SEMICOLON "Expect ';' after expression."
     pure $ StmtExpr expr
 
 expression :: Parser Expr
