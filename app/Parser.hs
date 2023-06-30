@@ -68,15 +68,15 @@ check tokenType = do
 Matches and consumes a specific token without returning it.
 Results in an error of topken does not match.
 -}
-expect :: TokenType -> Parser Token
-expect tokenType = do
+expect :: TokenType -> String -> Parser Token
+expect tokenType description = do
     next <- advance
     if next.type_ == tokenType
         then pure next
-        else parseError next $ "Expected " ++ show tokenType ++ " but was " ++ show next.type_
+        else parseError next $ description
 
-expect_ :: TokenType -> Parser ()
-expect_ tokenType = const () <$> expect tokenType
+expect_ :: TokenType -> String -> Parser ()
+expect_ tokenType description = const () <$> expect tokenType description
 
 {- |
 Returns next token without consuming it.
@@ -133,12 +133,27 @@ choiceMatch choices fallback = peek >>= loop choices
             else loop rest nextToken
 
 {- |
+    Selects one of many possible parsers based on the next token (matched token IS consumed).
+    If no choice matches then the fallback parser is used.
+
+    Provides the line number of the token to the matched choice.
+-}
+choiceMatchLine :: [(TokenType, (Int -> Parser a))] -> Parser a -> Parser a
+choiceMatchLine choices fallback = peek >>= loop choices
+  where
+    loop [] _ = fallback
+    loop ((tokenType, currChoice) : rest) nextToken =
+        if tokenType == nextToken.type_
+            then skip >> (currChoice nextToken.line)
+            else loop rest nextToken
+
+{- |
 Fails the parsing with an error message.
 -}
 parseError :: Token -> String -> Parser a
 parseError token msg = Parser $ \tokens ->
     ( tokens
-    , Left $ "line " ++ show token.line ++ ": " ++ msg
+    , Left $ "[line " ++ show token.line ++ "] Error at '" ++ token.lexeme ++ "': " ++ msg
     )
 
 program :: Parser [Stmt]
@@ -159,16 +174,16 @@ declaration = do
 
 varDeclaration :: Parser Stmt
 varDeclaration = do
-    expect_ VAR
-    identifier <- expect IDENTIFIER
+    expect_ VAR "Expect 'var'"
+    identifier <- expect IDENTIFIER "Expect variable name."
     hasInitialiser <- match EQUAL
     if hasInitialiser
         then do
             initExpr <- expression
-            expect_ SEMICOLON
+            expect_ SEMICOLON "Expect semicolon."
             pure $ StmtVarDecl identifier.lexeme initExpr
         else do
-            expect_ SEMICOLON
+            expect_ SEMICOLON "Expect semicolon."
             pure $ StmtVarDecl identifier.lexeme (Literal LiteralNil)
 
 statement :: Parser Stmt
@@ -184,14 +199,14 @@ statement = do
 
 forStatement :: Parser Stmt
 forStatement = do
-    expect_ FOR
-    expect_ LEFT_PAREN
+    expect_ FOR "Expect for."
+    expect_ LEFT_PAREN "Expect ("
 
     maybeInit <- forInitalizer
     condition <- forCondition
-    expect_ SEMICOLON
+    expect_ SEMICOLON "Expect semi"
     maybeIncr <- forIncrement
-    expect_ RIGHT_PAREN
+    expect_ RIGHT_PAREN "Expect right paren"
     forBody <- statement
 
     let desugaredWhileBody =
@@ -236,18 +251,18 @@ whileStatement :: Parser Stmt
 whileStatement =
     -- Experimenting with applicatiove syntax, don't know if I like it... :-)
     pure StmtWhile
-        <* expect WHILE
-        <* expect LEFT_PAREN
+        <* expect WHILE "Expect while"
+        <* expect LEFT_PAREN "Expect left pren"
         <*> expression
-        <* expect RIGHT_PAREN
+        <* expect RIGHT_PAREN "Expect right paren"
         <*> statement
 
 ifStatement :: Parser Stmt
 ifStatement = do
-    expect_ IF
-    expect_ LEFT_PAREN
+    expect_ IF "Expect if keyword"
+    expect_ LEFT_PAREN "Expect left pren"
     condExpr <- expression
-    expect_ RIGHT_PAREN
+    expect_ RIGHT_PAREN "Expect roght pren"
     thenStmt <- statement
     choiceMatch
         [ (ELSE, statement >>= pure . StmtIf condExpr thenStmt . Just)
@@ -255,7 +270,7 @@ ifStatement = do
         $ pure (StmtIf condExpr thenStmt Nothing)
 
 blockStatement :: Parser Stmt
-blockStatement = expect_ LEFT_BRACE >> zeroOrMoreStmts []
+blockStatement = expect_ LEFT_BRACE "expect begin block" >> zeroOrMoreStmts []
   where
     zeroOrMoreStmts :: [Stmt] -> Parser Stmt
     zeroOrMoreStmts stmts = do
@@ -270,15 +285,15 @@ blockStatement = expect_ LEFT_BRACE >> zeroOrMoreStmts []
 
 printStatement :: Parser Stmt
 printStatement = do
-    expect_ PRINT
+    expect_ PRINT "expect print"
     expr <- expression
-    expect_ SEMICOLON
+    expect_ SEMICOLON "expect semi"
     pure $ StmtPrint expr
 
 expressionStatement :: Parser Stmt
 expressionStatement = do
     expr <- expression
-    expect_ SEMICOLON
+    expect_ SEMICOLON "expect semi"
     pure $ StmtExpr expr
 
 expression :: Parser Expr
@@ -286,16 +301,16 @@ expression = assignment
 
 assignment :: Parser Expr
 assignment = do
-    prevToken <- peek
     targetExpr <- logicOr
 
+    prevToken <- peek
     isAssignment <- match EQUAL
     if isAssignment
         then do
             valueExpr <- logicOr
             case targetExpr of
-                Variable varname -> pure $ Assignment varname valueExpr
-                _ -> parseError prevToken "Illegal target for assignment."
+                Variable line varname -> pure $ Assignment line varname valueExpr
+                _ -> parseError prevToken "Invalid assignment target."
         else pure targetExpr
 
 logicOr :: Parser Expr
@@ -323,9 +338,9 @@ equality = comparison >>= equalityLoop
   where
     equalityLoop :: Expr -> Parser Expr
     equalityLoop lhs =
-        choiceMatch
-            [ (BANG_EQUAL, comparison >>= equalityLoop . Binary NotEqual lhs)
-            , (EQUAL_EQUAL, comparison >>= equalityLoop . Binary Equal lhs)
+        choiceMatchLine
+            [ (BANG_EQUAL, \line -> comparison >>= equalityLoop . Binary line NotEqual lhs)
+            , (EQUAL_EQUAL, \line -> comparison >>= equalityLoop . Binary line Equal lhs)
             ]
             $ pure lhs
 
@@ -334,11 +349,11 @@ comparison = term >>= comparisonLoop
 
 comparisonLoop :: Expr -> Parser Expr
 comparisonLoop lhs =
-    choiceMatch
-        [ (GREATER, term >>= comparisonLoop . Binary GreaterThan lhs)
-        , (GREATER_EQUAL, term >>= comparisonLoop . Binary GreaterOrEqual lhs)
-        , (LESS, term >>= comparisonLoop . Binary LessThan lhs)
-        , (LESS_EQUAL, term >>= comparisonLoop . Binary LessOrEqual lhs)
+    choiceMatchLine
+        [ (GREATER, \line -> term >>= comparisonLoop . Binary line GreaterThan lhs)
+        , (GREATER_EQUAL, \line -> term >>= comparisonLoop . Binary line GreaterOrEqual lhs)
+        , (LESS, \line -> term >>= comparisonLoop . Binary line LessThan lhs)
+        , (LESS_EQUAL, \line -> term >>= comparisonLoop . Binary line LessOrEqual lhs)
         ]
         $ pure lhs
 
@@ -347,9 +362,9 @@ term = factor >>= termLoop
   where
     termLoop :: Expr -> Parser Expr
     termLoop lhs =
-        choiceMatch
-            [ (MINUS, factor >>= termLoop . Binary Subtraction lhs)
-            , (PLUS, factor >>= termLoop . Binary Addition lhs)
+        choiceMatchLine
+            [ (MINUS, \line -> factor >>= termLoop . Binary line Subtraction lhs)
+            , (PLUS, \line -> factor >>= termLoop . Binary line Addition lhs)
             ]
             $ pure lhs
 
@@ -358,9 +373,9 @@ factor = unary >>= factorLoop
   where
     factorLoop :: Expr -> Parser Expr
     factorLoop lhs =
-        choiceMatch
-            [ (SLASH, unary >>= factorLoop . Binary Division lhs)
-            , (STAR, unary >>= factorLoop . Binary Multiplication lhs)
+        choiceMatchLine
+            [ (SLASH, \line -> unary >>= factorLoop . Binary line Division lhs)
+            , (STAR, \line -> unary >>= factorLoop . Binary line Multiplication lhs)
             ]
             $ pure lhs
 
@@ -384,7 +399,7 @@ primary = do
         NIL -> pure $ Literal LiteralNil
         LEFT_PAREN -> do
             expr <- expression
-            expect_ RIGHT_PAREN
+            expect_ RIGHT_PAREN "expect roight paren"
             pure $ Grouping expr
-        IDENTIFIER -> pure $ Variable next.lexeme
-        _ -> parseError next $ "An expression can not start with " ++ show next.type_ ++ ""
+        IDENTIFIER -> pure $ Variable next.line next.lexeme
+        _ -> parseError next $ "Expect expression."

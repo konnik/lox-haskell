@@ -38,16 +38,18 @@ run onError source = do
 
     case scanTokens source of
         Right tokens -> do
-            putStrLn "Tokens: "
-            reportTokens tokens
+            -- putStrLn "Tokens: "
+            -- reportTokens tokens
             case Parser.parse tokens of
-                Left str -> putStrLn ("Parse error: " ++ str)
+                Left str -> do
+                    hPutStrLn stderr str
+                    onError
                 Right program -> do
-                    putStrLn "Parsed statements: "
-                    reportStatements program
-                    putStrLn ""
+                    -- putStrLn "Parsed statements: "
+                    -- reportStatements program
+                    -- putStrLn ""
                     -- putStrLn "Program output:"
-                    Interpreter.run program
+                    Interpreter.run False program
         -- putStrLn "Done."
         Left err -> do
             reportError err

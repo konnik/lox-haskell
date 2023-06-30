@@ -9,29 +9,51 @@ import Value qualified
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
+import Control.Monad.Trans.Reader (ReaderT (runReaderT), ask, local)
 import Control.Monad.Trans.State (StateT, get, gets, modify, put, runStateT)
+import GHC.IO.Exception (ExitCode (ExitFailure))
+import System.Exit (exitWith)
+import System.IO (hPutStrLn, stderr)
 
 -- TODO Read these articles again and decide if this monad stack (StateT / ExceptT over IO)
 -- really is the best design.... :-)
 -- https://www.fpcomplete.com/blog/2017/06/readert-design-pattern/
 -- https://www.fpcomplete.com/blog/2016/11/exceptions-best-practices-haskell/
 -- https://www.tweag.io/blog/2020-04-16-exceptions-in-haskell/
-type Interpreter m a = ExceptT String (StateT Environment m) a
+type Interpreter m a = ReaderT Int (ExceptT Error (StateT Environment m)) a
 
-run :: [Stmt] -> IO ()
-run stmts = do
-    (result, env) <- runStateT (runExceptT (runWithEnv stmts)) Environment.newEnvironment
+data Error = Error
+    { line :: Int
+    , description :: String
+    }
+    deriving (Show)
+
+run :: Bool -> [Stmt] -> IO ()
+run _debug stmts = do
+    (result, _env) <- runStateT (runExceptT (runReaderT (runWithEnv stmts) 1)) Environment.newEnvironment
     case result of
         Right _ -> pure ()
         Left err -> do
-            putStrLn ""
-            putStrLn ""
-            putStrLn "RUNTIME ERROR!!!"
-            putStrLn err
-            putStrLn ""
-            Environment.printEnv env
-            putStrLn ""
+            reportError err
+            exitWith $ ExitFailure 70
 
+reportError :: Error -> IO ()
+reportError err = do
+    hPutStrLn stderr err.description
+    hPutStrLn stderr $ "[line " ++ show err.line ++ "]"
+
+-- if debug
+--     then do
+--         putStrLn ""
+--         putStrLn ""
+--         putStrLn "RUNTIME ERROR!!!"
+--     else pure ()
+-- if debug
+--     then do
+--         putStrLn ""
+--         Environment.printEnv env
+--         putStrLn ""
+--     else pure ()
 runWithEnv :: (MonadIO m) => [Stmt] -> Interpreter m ()
 runWithEnv stmts = do
     case stmts of
@@ -40,8 +62,23 @@ runWithEnv stmts = do
             runStmt stmt
             runWithEnv rest
 
+getCurrentLine :: (Monad m) => Interpreter m Int
+getCurrentLine = do
+    line <- ask
+    pure line
+
+setCurrentLine :: (Monad m) => Int -> Interpreter m a -> Interpreter m a
+setCurrentLine line action = do
+    local (const line) action
+
 runtimeError :: (Monad m) => String -> Interpreter m a
-runtimeError msg = throwE msg
+runtimeError description = do
+    line <- getCurrentLine
+    (lift . throwE)
+        Error
+            { line = line
+            , description = description
+            }
 
 runStmt :: (MonadIO m) => Stmt -> Interpreter m ()
 runStmt stmt = do
@@ -56,7 +93,7 @@ runStmt stmt = do
 runVarDeclStmt :: (MonadIO m) => String -> Expr -> Interpreter m ()
 runVarDeclStmt name initExpr = do
     value <- eval initExpr
-    lift $ modify $ Environment.declareVar name value
+    lift $ lift $ modify $ Environment.declareVar name value
 
 runPrintStmt :: (MonadIO m) => Expr -> Interpreter m ()
 runPrintStmt expr = do
@@ -65,9 +102,9 @@ runPrintStmt expr = do
 
 runBlock :: (MonadIO m) => [Stmt] -> Interpreter m ()
 runBlock stmts = do
-    lift $ modify Environment.enterBlock
+    lift $ lift $ modify Environment.enterBlock
     runWithEnv stmts
-    lift $ modify Environment.leaveBlock
+    lift $ lift $ modify Environment.leaveBlock
     pure ()
 
 runIfStmt :: (MonadIO m) => Expr -> Stmt -> Maybe Stmt -> Interpreter m ()
@@ -93,9 +130,9 @@ eval expr =
         Literal litval -> evalLiteral litval
         Unary op expr2 -> evalUnary op expr2
         Grouping expr2 -> eval expr2
-        Binary op lhs rhs -> evalBinary op lhs rhs
-        Variable name -> evalVariable name
-        Assignment name valueExpr -> evalAssignment name valueExpr
+        Binary line op lhs rhs -> setCurrentLine line $ evalBinary op lhs rhs
+        Variable line name -> setCurrentLine line $ evalVariable name
+        Assignment line name valueExpr -> setCurrentLine line $ evalAssignment name valueExpr
         Logic op lhs rhs -> evalLogic op lhs rhs
 
 evalLogic :: (Monad m) => LogicOp -> Expr -> Expr -> Interpreter m Value
@@ -115,16 +152,16 @@ evalLogic op lhs rhs =
 evalAssignment :: (Monad m) => String -> Expr -> Interpreter m Value
 evalAssignment name expr = do
     value <- eval expr
-    env <- lift get
+    env <- lift $ lift get
     case Environment.setVar name value env of
         Left err -> runtimeError err
         Right env' -> do
-            lift $ put env'
+            lift $ lift $ put env'
             pure $ value
 
 evalVariable :: (Monad m) => String -> Interpreter m Value
 evalVariable name = do
-    result <- lift $ gets $ Environment.getVar name
+    result <- lift $ lift $ gets $ Environment.getVar name
     case result of
         Right val -> pure val
         Left err -> runtimeError err
@@ -155,19 +192,19 @@ evalAdditionOrStringConcatination lhs rhs =
     case (lhs, rhs) of
         (NumVal _, NumVal _) -> evalArithmetic (+) lhs rhs
         (StrVal a, StrVal b) -> pure $ StrVal (a ++ b)
-        _ -> runtimeError $ "Plus operator can only be used on two numbers or two strings. " ++ show (lhs, rhs)
+        _ -> runtimeError $ "Operands must be two numbers or two strings."
 
-evalArithmetic :: (Monad m) => (Float -> Float -> Float) -> Value -> Value -> Interpreter m Value
+evalArithmetic :: (Monad m) => (Double -> Double -> Double) -> Value -> Value -> Interpreter m Value
 evalArithmetic func lhs rhs =
     case (lhs, rhs) of
         (NumVal a, NumVal b) -> pure $ NumVal (func a b)
-        _ -> runtimeError $ "Arithmetic operations is only allowed betweeen two numbers. " ++ show (lhs, rhs)
+        _ -> runtimeError $ "Operands must be numbers."
 
-evalComparison :: (Monad m) => (Float -> Float -> Bool) -> Value -> Value -> Interpreter m Value
+evalComparison :: (Monad m) => (Double -> Double -> Bool) -> Value -> Value -> Interpreter m Value
 evalComparison comparison lhs rhs =
     case (lhs, rhs) of
         (NumVal a, NumVal b) -> pure $ BoolVal (comparison a b)
-        _ -> runtimeError $ "Only two numbers can be compared." ++ show (lhs, rhs)
+        _ -> runtimeError $ "Operands must be numbers."
 
 evalEqual :: (Monad m) => (Bool -> Bool) -> Value -> Value -> Interpreter m Value
 evalEqual modifier lhs rhs =
@@ -187,7 +224,7 @@ evalUnary op expr = do
         (Negate, NumVal n) -> pure $ NumVal (-n)
         (Not, _) -> pure $ BoolVal (not (isTruthy val))
         (Show, v) -> pure $ StrVal (Value.toString v)
-        (Negate, _) -> runtimeError $ "Only numbers kan be negated."
+        (Negate, _) -> runtimeError $ "Operand must be a number."
 
 evalLiteral :: (Monad m) => LiteralValue -> Interpreter m Value
 evalLiteral litval =

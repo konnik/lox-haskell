@@ -37,7 +37,7 @@ getVar name env =
             Just parent ->
                 getVar name parent
             Nothing ->
-                Left $ "Undefined variable: '" ++ name ++ "'"
+                Left $ "Undefined variable '" ++ name ++ "'."
 
 setVar :: String -> Value -> Environment -> Either String Environment
 setVar name val env =
@@ -48,7 +48,7 @@ setVar name val env =
                 parent' <- setVar name val parent
                 pure $ env{parent = Just parent'}
             Nothing ->
-                Left $ "Variable not declared: '" ++ name ++ "'"
+                Left $ "Undefined variable '" ++ name ++ "'."
 
 enterBlock :: Environment -> Environment
 enterBlock parent = newEnvironment{parent = Just parent}

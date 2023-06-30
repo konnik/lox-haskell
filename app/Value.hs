@@ -3,9 +3,11 @@ module Value (
     toString,
 ) where
 
+import Numeric (showFFloat)
+
 data Value
     = StrVal String
-    | NumVal Float
+    | NumVal Double
     | BoolVal Bool
     | NilVal
     deriving (Show, Eq)
@@ -14,7 +16,7 @@ toString :: Value -> String
 toString value =
     case value of
         StrVal str -> str
-        NumVal n -> normalizeNum (show n)
+        NumVal n -> normalizeNum (showFFloat Nothing n "")
         BoolVal True -> "true"
         BoolVal False -> "false"
         NilVal -> "nil"

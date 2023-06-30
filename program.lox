@@ -1,24 +1,3 @@
-var count = 5;
-var previous = 0;
-var current = 1;
-
-for (var i=1; i <= count; i = i + 1) {
-  print "Fibonacci number " + show i + " is " + show current + ".";
-
-  // Calculate the next Fibonacci number
-  var next = previous + current;
-  previous = current;
-  current = next;
-}
-
-var q = 1;
-var korv = true;
-while (korv) {
-    print "In while loop...";
-    q = q + 1;
-
-    var apa = "korv";
-    if (q>2) 
-        korv = false;
-}
-
+// [line 3] Error at '{': Expect expression.
+// [line 3] Error at ')': Expect ';' after expression.
+for ({}; a < 2; a = a + 1) {}

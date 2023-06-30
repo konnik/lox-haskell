@@ -10,18 +10,18 @@ data Stmt
     deriving (Show)
 
 data Expr
-    = Binary BinaryOp Expr Expr
+    = Binary Int BinaryOp Expr Expr
     | Grouping Expr
     | Literal LiteralValue
     | Unary UnaryOp Expr
-    | Variable String
-    | Assignment String Expr
+    | Variable Int String
+    | Assignment Int String Expr
     | Logic LogicOp Expr Expr
     deriving (Show)
 
 data LiteralValue
     = LiteralString String
-    | LiteralNumber Float
+    | LiteralNumber Double
     | LiteralTrue
     | LiteralFalse
     | LiteralNil

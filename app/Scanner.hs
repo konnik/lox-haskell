@@ -129,7 +129,7 @@ nextToken s =
         let
             str = takeWhile ((/=) '"') (drop 1 s.source)
          in
-            if length str > length s.source
+            if length str >= (length s.source - 1)
                 then errorResult s.line "Unterminated string."
                 else emitString str
 
