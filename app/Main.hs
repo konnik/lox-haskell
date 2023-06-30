@@ -41,8 +41,8 @@ run onError source = do
             -- putStrLn "Tokens: "
             -- reportTokens tokens
             case Parser.parse tokens of
-                Left str -> do
-                    hPutStrLn stderr str
+                Left errors -> do
+                    mapM_ reportError errors
                     onError
                 Right program -> do
                     -- putStrLn "Parsed statements: "

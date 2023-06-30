@@ -5,32 +5,47 @@ module Parser (
 
 import Ast
 import Data.Maybe (catMaybes, fromMaybe)
+import Result qualified
 import Token (Token (..), TokenType (..))
 
-newtype Parser a = Parser {runParser :: [Token] -> ([Token], Either String a)}
+newtype Parser a = Parser {runParser :: [Token] -> ([Token], [Result.Error], Maybe a)}
 
 instance Functor Parser where
     fmap f p = Parser $ \tokens ->
         case runParser p tokens of
-            (tokens', Right v) -> (tokens', Right (f v))
-            (tokens', Left err) -> (tokens', Left err)
+            (tokens', errors, Just v) -> (tokens', errors, Just (f v))
+            (tokens', errors, Nothing) -> (tokens', errors, Nothing)
 
 instance Applicative Parser where
-    pure value = Parser $ \tokens -> (tokens, Right value)
+    pure value = Parser $ \tokens -> (tokens, [], Just value)
     (<*>) fab fa = Parser $ \tokens ->
         case runParser fab tokens of
-            (tokens', Right ab) -> runParser (fmap ab fa) tokens'
-            (tokens', Left err) -> (tokens', Left err)
+            (tokens', errors', Just ab) -> case runParser (fmap ab fa) tokens' of
+                (tokens'', errors'', Just b) -> (tokens'', errors' ++ errors'', Just b)
+                (tokens'', errors'', Nothing) -> (tokens'', errors' ++ errors'', Nothing)
+            (tokens', errors', Nothing) -> (tokens', errors', Nothing)
 
 instance Monad Parser where
     return = pure
     (>>=) ma f = Parser $ \tokens ->
         case runParser ma tokens of
-            (tokens', Right a) -> runParser (f a) tokens'
-            (tokens', Left err) -> (tokens', Left err)
+            (tokens', errors', Just a) -> case runParser (f a) tokens' of
+                (tokens'', errors'', Just b) -> (tokens'', errors' ++ errors'', Just b)
+                (tokens'', errors'', Nothing) -> (tokens'', errors' ++ errors'', Nothing)
+            (tokens', errors', Nothing) -> (tokens', errors', Nothing)
 
-unexpectedEndOfFile :: ([Token], Either String a)
-unexpectedEndOfFile = ([], Left "Unexpected end of file.")
+unexpectedEndOfFile :: ([Token], [Result.Error], Maybe a)
+unexpectedEndOfFile =
+    ( []
+    ,
+        [ Result.Error
+            { line = 99
+            , where_ = ""
+            , message = "Unexpected end of file."
+            }
+        ]
+    , Nothing
+    )
 
 -- parsing primitives
 
@@ -85,7 +100,7 @@ peek :: Parser Token
 peek = Parser $ \tokens ->
     case tokens of
         [] -> unexpectedEndOfFile
-        t : _ -> (tokens, Right t)
+        t : _ -> (tokens, [], Just t)
 
 {- |
 Skips current token without returning it.
@@ -100,11 +115,13 @@ advance :: Parser Token
 advance = Parser $ \tokens ->
     case tokens of
         [] -> unexpectedEndOfFile
-        t : tokens' -> (tokens', Right t)
+        t : tokens' -> (tokens', [], Just t)
 
-parse :: [Token] -> Either String [Stmt]
+parse :: [Token] -> Either [Result.Error] [Stmt]
 parse tokens = do
-    snd $ runParser program tokens
+    case runParser program tokens of
+        (_, [], Just stmts) -> Right stmts
+        (_, errors, _) -> Left errors
 
 {- |
     Selects one of many possible parsers based on the next token (matched token is not consumed).
@@ -153,8 +170,30 @@ Fails the parsing with an error message.
 parseError :: Token -> String -> Parser a
 parseError token msg = Parser $ \tokens ->
     ( tokens
-    , Left $ "[line " ++ show token.line ++ "] Error at '" ++ token.lexeme ++ "': " ++ msg
+    , [err]
+    , Nothing
     )
+  where
+    err =
+        Result.Error
+            { line = token.line
+            , where_ = " at '" ++ token.lexeme ++ "'"
+            , message = msg
+            }
+
+_parseErrorAndContinue :: Token -> String -> Parser ()
+_parseErrorAndContinue token msg = Parser $ \tokens ->
+    ( tokens
+    , [err]
+    , Just ()
+    )
+  where
+    err =
+        Result.Error
+            { line = token.line
+            , where_ = " at '" ++ token.lexeme ++ "'"
+            , message = msg
+            }
 
 program :: Parser [Stmt]
 program = do
