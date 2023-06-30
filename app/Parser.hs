@@ -386,9 +386,10 @@ assignment = do
     isAssignment <- match EQUAL
     if isAssignment
         then do
-            valueExpr <- logicOr
+            valueExpr <- assignment
             case targetExpr of
-                Variable line varname -> pure $ Assignment line varname valueExpr
+                Variable line varname ->
+                    pure $ Assignment line varname valueExpr
                 _ -> parseError prevToken "Invalid assignment target."
         else pure targetExpr
 
