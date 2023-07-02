@@ -16,6 +16,7 @@ import Native qualified
 import System.Exit (exitWith)
 import System.IO (hPutStrLn, stderr)
 
+import Control.Monad (when)
 import Types (Error (..))
 import Types qualified
 
@@ -154,11 +155,9 @@ runIfStmt cond thenStmt maybeElseStmt = do
 runWhileStmt :: Expr -> Stmt -> Interpreter ()
 runWhileStmt cond whileStmt = do
     condValue <- eval cond
-    if isTruthy condValue
-        then do
-            runStmt whileStmt
-            runWhileStmt cond whileStmt
-        else pure ()
+    when (isTruthy condValue) $ do
+        runStmt whileStmt
+        runWhileStmt cond whileStmt
 
 eval :: Expr -> Interpreter Value
 eval expr =

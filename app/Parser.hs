@@ -4,6 +4,7 @@ module Parser (
 ) where
 
 import Ast
+import Control.Monad (when)
 import Data.Maybe (catMaybes, fromMaybe)
 import Result qualified
 import Token (Token (..), TokenType (..))
@@ -227,7 +228,7 @@ functionStmt kind = do
     nameToken <- expect IDENTIFIER $ "Expect " ++ kind ++ " name."
     expect_ LEFT_PAREN $ "Expect '(' after " ++ kind ++ " name."
     params <- functionParams
-    expect_ RIGHT_PAREN "Expect ')' after parameter list."
+    expect_ RIGHT_PAREN "Expect ')' after parameters."
     block <- blockStatement
     pure $ StmtFunctionDecl nameToken.lexeme params block
 
@@ -240,11 +241,9 @@ functionParams = do
   where
     loop :: [String] -> Parser [String]
     loop params = do
-        if length params >= 255
-            then do
-                t <- peek
-                parseErrorAndContinue t "Can't have more than 255 parameters."
-            else pure ()
+        when (length params >= 255) $ do
+            t <- peek
+            parseErrorAndContinue t "Can't have more than 255 parameters."
 
         param <- expect IDENTIFIER "Expect identifier"
         moreParams <- match COMMA
@@ -316,9 +315,14 @@ statement = do
 returnStatement :: Parser Stmt
 returnStatement = do
     token <- expect RETURN "BUG: expect 'return'"
-    expr <- expression
-    expect_ SEMICOLON "Expect ';' after return value."
-    pure $ StmtReturn token.line expr
+    noReturnValue <- match SEMICOLON
+    if noReturnValue
+        then do
+            pure $ StmtReturn token.line (Literal LiteralNil)
+        else do
+            expr <- expression
+            expect_ SEMICOLON "Expect ';' after return value."
+            pure $ StmtReturn token.line expr
 
 forStatement :: Parser Stmt
 forStatement = do
@@ -393,7 +397,7 @@ ifStatement = do
         $ pure (StmtIf condExpr thenStmt Nothing)
 
 blockStatement :: Parser [Stmt]
-blockStatement = expect_ LEFT_BRACE "expect begin block" >> zeroOrMoreStmts []
+blockStatement = expect_ LEFT_BRACE "Expect '{' before function body." >> zeroOrMoreStmts []
   where
     zeroOrMoreStmts :: [Stmt] -> Parser [Stmt]
     zeroOrMoreStmts stmts = do
@@ -543,9 +547,8 @@ arguments = do
         token <- peek
         argExpr <- expression
 
-        if length params >= 255
-            then parseErrorAndContinue token "Can't have more than 255 arguments."
-            else pure ()
+        when (length params >= 255) $ do
+            parseErrorAndContinue token "Can't have more than 255 arguments."
 
         moreArgs <- match COMMA
         if moreArgs

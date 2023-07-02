@@ -63,7 +63,7 @@ nextToken s =
         x : _ ->
             if isAlphaUnderscore x
                 then identifier
-                else errorResult s.line ("Unexpected character: " ++ show x)
+                else errorResult s.line ("Unexpected character.")
   where
     identifier :: Result (Token, Scanner)
     identifier =
