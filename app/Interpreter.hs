@@ -17,6 +17,9 @@ import System.Exit (exitWith)
 import System.IO (hPutStrLn, stderr)
 
 import Control.Monad (when)
+import Data.IORef (IORef, newIORef, writeIORef)
+import Environment (Environment)
+import GHC.IORef (readIORef)
 import Types (Error (..))
 import Types qualified
 
@@ -108,6 +111,18 @@ runInNewEnvironment action = do
         lift $ modify Environment.leaveBlock
     pure result
 
+runWithClosure :: IORef (Environment Value) -> Interpreter a -> Interpreter a
+runWithClosure ioRefClosure action = do
+    closure <- liftIO $ readIORef ioRefClosure
+    line <- ask
+    currEnv <- lift $ lift get
+    lift $ lift $ put closure
+    result <- lift $ finallyE (runReaderT action line) $ do
+        closure' <- lift $ get
+        liftIO $ writeIORef ioRefClosure closure'
+        lift $ put currEnv
+    pure result
+
 _setVar :: String -> Value -> Interpreter ()
 _setVar name value = do
     env <- lift $ lift get
@@ -123,7 +138,9 @@ declareVar name value = do
 
 runFunctionDeclStmt :: String -> [String] -> [Stmt] -> Interpreter ()
 runFunctionDeclStmt name params block = do
-    let callable = CallableVal (length params) Value.UserDefined name $ \args -> do
+    currEnv <- lift $ lift get
+    ioRefClosure <- liftIO $ newIORef currEnv
+    let callable = CallableVal (length params) Value.UserDefined name $ \args -> handleReturn $ runWithClosure ioRefClosure $ do
             sequence_ $ zipWith declareVar params args
             runStatements block
             pure NilVal
@@ -180,7 +197,7 @@ evalCall calleeExpr arguments = do
                 then runtimeError $ "Expected " <> show arity <> " arguments but got " <> show (length arguments) <> "."
                 else do
                     argValues <- mapM eval arguments
-                    result <- runInNewEnvironment $ handleReturn $ func argValues
+                    result <- func argValues
                     pure result
         _ -> runtimeError "Can only call functions and classes."
 

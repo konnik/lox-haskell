@@ -4,6 +4,7 @@ module Value (
     toString,
 ) where
 
+import Environment (Environment)
 import Numeric (showFFloat)
 import Types (Interpreter)
 
