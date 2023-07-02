@@ -123,7 +123,7 @@ declareVar name value = do
 
 runFunctionDeclStmt :: String -> [String] -> [Stmt] -> Interpreter ()
 runFunctionDeclStmt name params block = do
-    let callable = CallableVal (length params) name $ \args -> do
+    let callable = CallableVal (length params) Value.UserDefined name $ \args -> do
             sequence_ $ zipWith declareVar params args
             runStatements block
             pure NilVal
@@ -175,7 +175,7 @@ evalCall :: Expr -> [Expr] -> Interpreter Value
 evalCall calleeExpr arguments = do
     callee <- eval calleeExpr
     case callee of
-        CallableVal arity _ func ->
+        CallableVal arity _ _ func ->
             if arity /= length arguments
                 then runtimeError $ "Expected " <> show arity <> " arguments but got " <> show (length arguments) <> "."
                 else do

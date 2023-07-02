@@ -1,5 +1,6 @@
 module Value (
     Value (..),
+    FuncType (..),
     toString,
 ) where
 
@@ -11,7 +12,11 @@ data Value
     | NumVal Double
     | BoolVal Bool
     | NilVal
-    | CallableVal Int String ([Value] -> Interpreter Value Value)
+    | CallableVal Int FuncType String ([Value] -> Interpreter Value Value)
+
+data FuncType
+    = Native
+    | UserDefined
 
 instance Show Value where
     show (StrVal str) = show str
@@ -25,7 +30,8 @@ toString value =
         BoolVal True -> "true"
         BoolVal False -> "false"
         NilVal -> "nil"
-        CallableVal _ name _ -> "<fn " ++ name ++ ">"
+        CallableVal _ Native _ _ -> "<native fn>"
+        CallableVal _ UserDefined name _ -> "<fn " ++ name ++ ">"
   where
     normalizeNum str =
         case reverse str of
