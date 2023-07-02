@@ -5,21 +5,24 @@ author:        konnik
 maintainer:    niklas.konstenius@gmail.com
 
 executable hlox
-  ghc-options:        -Wall -Werror
+  ghc-options:        -Wall -Werror -Wno-unused-top-binds -Wno-unused-imports
   main-is:            Main.hs
   other-modules:
     Ast
     Environment
     Interpreter
+    Native
     Parser
     Result
     Scanner
     Token
+    Types
     Value
 
   build-depends:
     , base          ^>=4.18.0.0
     , containers
+    , time
     , transformers
 
   hs-source-dirs:     app

@@ -7,6 +7,8 @@ data Stmt
     | StmtBlock [Stmt]
     | StmtIf Expr Stmt (Maybe Stmt)
     | StmtWhile Expr Stmt
+    | StmtFunctionDecl String [String] [Stmt]
+    | StmtReturn Int Expr
     deriving (Show)
 
 data Expr
@@ -17,6 +19,7 @@ data Expr
     | Variable Int String
     | Assignment Int String Expr
     | Logic LogicOp Expr Expr
+    | Call Int Expr [Expr]
     deriving (Show)
 
 data LiteralValue

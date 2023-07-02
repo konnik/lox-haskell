@@ -4,13 +4,18 @@ module Value (
 ) where
 
 import Numeric (showFFloat)
+import Types (Interpreter)
 
 data Value
     = StrVal String
     | NumVal Double
     | BoolVal Bool
     | NilVal
-    deriving (Show, Eq)
+    | CallableVal Int String ([Value] -> Interpreter Value Value)
+
+instance Show Value where
+    show (StrVal str) = show str
+    show x = toString x
 
 toString :: Value -> String
 toString value =
@@ -20,6 +25,7 @@ toString value =
         BoolVal True -> "true"
         BoolVal False -> "false"
         NilVal -> "nil"
+        CallableVal _ name _ -> "<fn " ++ name ++ ">"
   where
     normalizeNum str =
         case reverse str of

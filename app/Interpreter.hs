@@ -1,77 +1,68 @@
 module Interpreter (run) where
 
 import Ast
-import Environment (Environment)
 import Environment qualified
 import Value (Value (..))
 import Value qualified
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
+import Control.Monad.Trans.Except (catchE, finallyE, runExceptT, throwE)
 import Control.Monad.Trans.Reader (ReaderT (runReaderT), ask, local)
-import Control.Monad.Trans.State (StateT, get, gets, modify, put, runStateT)
+import Control.Monad.Trans.State (get, gets, modify, put, runStateT)
+import Data.Function ((&))
 import GHC.IO.Exception (ExitCode (ExitFailure))
+import Native qualified
 import System.Exit (exitWith)
 import System.IO (hPutStrLn, stderr)
 
--- TODO Read these articles again and decide if this monad stack (StateT / ExceptT over IO)
--- really is the best design.... :-)
--- https://www.fpcomplete.com/blog/2017/06/readert-design-pattern/
--- https://www.fpcomplete.com/blog/2016/11/exceptions-best-practices-haskell/
--- https://www.tweag.io/blog/2020-04-16-exceptions-in-haskell/
-type Interpreter m a = ReaderT Int (ExceptT Error (StateT Environment m)) a
+import Types (Error (..))
+import Types qualified
 
-data Error = Error
-    { line :: Int
-    , description :: String
-    }
-    deriving (Show)
+type Interpreter a = Types.Interpreter Value a
 
 run :: Bool -> [Stmt] -> IO ()
 run _debug stmts = do
-    (result, _env) <- runStateT (runExceptT (runReaderT (runWithEnv stmts) 1)) Environment.newEnvironment
+    let initialEnvironment =
+            Environment.newEnvironment
+                & Environment.declareVar "clock" Native.clock
+                & Environment.declareVar "readStr" Native.readStr
+
+    (result, _env) <- runStateT (runExceptT (runReaderT (runStatements stmts) 1)) initialEnvironment
     case result of
         Right _ -> pure ()
         Left err -> do
             reportError err
             exitWith $ ExitFailure 70
 
-reportError :: Error -> IO ()
+reportError :: Error Value -> IO ()
 reportError err = do
-    hPutStrLn stderr err.description
-    hPutStrLn stderr $ "[line " ++ show err.line ++ "]"
+    case err of
+        ReturnValue{value} -> do
+            hPutStrLn stderr "BUG: return-value not handled"
+            hPutStrLn stderr $ "[line " ++ show value ++ "]"
+        Error{line, description} -> do
+            hPutStrLn stderr description
+            hPutStrLn stderr $ "[line " ++ show line ++ "]"
 
--- if debug
---     then do
---         putStrLn ""
---         putStrLn ""
---         putStrLn "RUNTIME ERROR!!!"
---     else pure ()
--- if debug
---     then do
---         putStrLn ""
---         Environment.printEnv env
---         putStrLn ""
---     else pure ()
-runWithEnv :: (MonadIO m) => [Stmt] -> Interpreter m ()
-runWithEnv stmts = do
+runStatements :: [Stmt] -> Interpreter ()
+runStatements stmts = do
     case stmts of
         [] -> pure ()
         stmt : rest -> do
             runStmt stmt
-            runWithEnv rest
+            runStatements rest
 
-getCurrentLine :: (Monad m) => Interpreter m Int
+getCurrentLine :: Interpreter Int
 getCurrentLine = do
     line <- ask
     pure line
 
-setCurrentLine :: (Monad m) => Int -> Interpreter m a -> Interpreter m a
+setCurrentLine :: Int -> Interpreter a -> Interpreter a
 setCurrentLine line action = do
     local (const line) action
 
-runtimeError :: (Monad m) => String -> Interpreter m a
+runtimeError :: String -> Interpreter a
 runtimeError description = do
     line <- getCurrentLine
     (lift . throwE)
@@ -80,7 +71,7 @@ runtimeError description = do
             , description = description
             }
 
-runStmt :: (MonadIO m) => Stmt -> Interpreter m ()
+runStmt :: Stmt -> Interpreter ()
 runStmt stmt = do
     case stmt of
         StmtPrint expr -> runPrintStmt expr
@@ -89,25 +80,70 @@ runStmt stmt = do
         StmtBlock stmts -> runBlock stmts
         StmtIf cond thenStmt maybeElseStmt -> runIfStmt cond thenStmt maybeElseStmt
         StmtWhile cond whileStmt -> runWhileStmt cond whileStmt
+        StmtFunctionDecl name params body -> runFunctionDeclStmt name params body
+        StmtReturn line expr -> setCurrentLine line $ runReturnStmt expr
 
-runVarDeclStmt :: (MonadIO m) => String -> Expr -> Interpreter m ()
+runReturnStmt :: Expr -> Interpreter ()
+runReturnStmt expr =
+    eval expr >>= returnFromFunction
+
+returnFromFunction :: Value -> Interpreter a
+returnFromFunction value = do
+    (lift . throwE) ReturnValue{value}
+
+enterBlock :: Interpreter ()
+enterBlock = do
+    lift $ lift $ modify Environment.enterBlock
+
+leaveBlock :: Interpreter ()
+leaveBlock = do
+    lift $ lift $ modify Environment.leaveBlock
+
+runInNewEnvironment :: Interpreter a -> Interpreter a
+runInNewEnvironment action = do
+    enterBlock
+    line <- ask
+    result <- lift $ finallyE (runReaderT action line) $ do
+        lift $ modify Environment.leaveBlock
+    pure result
+
+_setVar :: String -> Value -> Interpreter ()
+_setVar name value = do
+    env <- lift $ lift get
+    case Environment.setVar name value env of
+        Right env' -> lift $ lift $ put env'
+        Left err -> runtimeError err
+
+declareVar :: String -> Value -> Interpreter ()
+declareVar name value = do
+    env <- lift $ lift get
+    let env' = Environment.declareVar name value env
+    lift $ lift $ put env'
+
+runFunctionDeclStmt :: String -> [String] -> [Stmt] -> Interpreter ()
+runFunctionDeclStmt name params block = do
+    let callable = CallableVal (length params) name $ \args -> do
+            sequence_ $ zipWith declareVar params args
+            runStatements block
+            pure NilVal
+
+    lift $ lift $ modify $ Environment.declareVar name callable
+
+runVarDeclStmt :: String -> Expr -> Interpreter ()
 runVarDeclStmt name initExpr = do
     value <- eval initExpr
     lift $ lift $ modify $ Environment.declareVar name value
 
-runPrintStmt :: (MonadIO m) => Expr -> Interpreter m ()
+runPrintStmt :: Expr -> Interpreter ()
 runPrintStmt expr = do
     value <- eval expr
     liftIO $ putStrLn $ Value.toString value
 
-runBlock :: (MonadIO m) => [Stmt] -> Interpreter m ()
-runBlock stmts = do
-    lift $ lift $ modify Environment.enterBlock
-    runWithEnv stmts
-    lift $ lift $ modify Environment.leaveBlock
-    pure ()
+runBlock :: [Stmt] -> Interpreter ()
+runBlock stmts = runInNewEnvironment $ do
+    runStatements stmts
 
-runIfStmt :: (MonadIO m) => Expr -> Stmt -> Maybe Stmt -> Interpreter m ()
+runIfStmt :: Expr -> Stmt -> Maybe Stmt -> Interpreter ()
 runIfStmt cond thenStmt maybeElseStmt = do
     condValue <- eval cond
     case (isTruthy condValue, maybeElseStmt) of
@@ -115,7 +151,7 @@ runIfStmt cond thenStmt maybeElseStmt = do
         (False, Just elseStmt) -> runStmt elseStmt
         (False, Nothing) -> pure ()
 
-runWhileStmt :: (MonadIO m) => Expr -> Stmt -> Interpreter m ()
+runWhileStmt :: Expr -> Stmt -> Interpreter ()
 runWhileStmt cond whileStmt = do
     condValue <- eval cond
     if isTruthy condValue
@@ -124,7 +160,7 @@ runWhileStmt cond whileStmt = do
             runWhileStmt cond whileStmt
         else pure ()
 
-eval :: (Monad m) => Expr -> Interpreter m Value
+eval :: Expr -> Interpreter Value
 eval expr =
     case expr of
         Literal litval -> evalLiteral litval
@@ -134,8 +170,35 @@ eval expr =
         Variable line name -> setCurrentLine line $ evalVariable name
         Assignment line name valueExpr -> setCurrentLine line $ evalAssignment name valueExpr
         Logic op lhs rhs -> evalLogic op lhs rhs
+        Call line callee args -> setCurrentLine line $ evalCall callee args
 
-evalLogic :: (Monad m) => LogicOp -> Expr -> Expr -> Interpreter m Value
+evalCall :: Expr -> [Expr] -> Interpreter Value
+evalCall calleeExpr arguments = do
+    callee <- eval calleeExpr
+    case callee of
+        CallableVal arity _ func ->
+            if arity /= length arguments
+                then runtimeError $ "Expected " <> show arity <> " arguments but got " <> show (length arguments) <> "."
+                else do
+                    argValues <- mapM eval arguments
+                    result <- runInNewEnvironment $ handleReturn $ func argValues
+                    pure result
+        _ -> runtimeError "Can only call functions and classes."
+
+debugPrintEnv :: Interpreter ()
+debugPrintEnv = do
+    env <- lift $ lift get
+    liftIO $ Environment.printEnv env
+
+handleReturn :: Interpreter Value -> Interpreter Value
+handleReturn action = do
+    line <- ask
+    lift $ catchE (runReaderT action line) $ \err -> do
+        case err of
+            ReturnValue{value} -> pure value
+            _ -> throwE err
+
+evalLogic :: LogicOp -> Expr -> Expr -> Interpreter Value
 evalLogic op lhs rhs =
     case op of
         LogicAnd -> do
@@ -149,7 +212,7 @@ evalLogic op lhs rhs =
                 then eval rhs
                 else pure lhsVal
 
-evalAssignment :: (Monad m) => String -> Expr -> Interpreter m Value
+evalAssignment :: String -> Expr -> Interpreter Value
 evalAssignment name expr = do
     value <- eval expr
     env <- lift $ lift get
@@ -159,14 +222,14 @@ evalAssignment name expr = do
             lift $ lift $ put env'
             pure $ value
 
-evalVariable :: (Monad m) => String -> Interpreter m Value
+evalVariable :: String -> Interpreter Value
 evalVariable name = do
     result <- lift $ lift $ gets $ Environment.getVar name
     case result of
         Right val -> pure val
         Left err -> runtimeError err
 
-evalBinary :: (Monad m) => BinaryOp -> Expr -> Expr -> Interpreter m Value
+evalBinary :: BinaryOp -> Expr -> Expr -> Interpreter Value
 evalBinary op lhs rhs = do
     leftVal <- eval lhs
     rightVal <- eval rhs
@@ -182,31 +245,31 @@ evalBinary op lhs rhs = do
         Equal -> evalEqual id leftVal rightVal
         NotEqual -> evalEqual not leftVal rightVal
 
-safeDivision :: (Monad m) => Value -> Value -> Interpreter m Value
+safeDivision :: Value -> Value -> Interpreter Value
 safeDivision lhs rhs = case rhs of
     NumVal 0 -> runtimeError "Division by zero."
     _ -> evalArithmetic ((/)) lhs rhs
 
-evalAdditionOrStringConcatination :: (Monad m) => Value -> Value -> Interpreter m Value
+evalAdditionOrStringConcatination :: Value -> Value -> Interpreter Value
 evalAdditionOrStringConcatination lhs rhs =
     case (lhs, rhs) of
         (NumVal _, NumVal _) -> evalArithmetic (+) lhs rhs
         (StrVal a, StrVal b) -> pure $ StrVal (a ++ b)
         _ -> runtimeError $ "Operands must be two numbers or two strings."
 
-evalArithmetic :: (Monad m) => (Double -> Double -> Double) -> Value -> Value -> Interpreter m Value
+evalArithmetic :: (Double -> Double -> Double) -> Value -> Value -> Interpreter Value
 evalArithmetic func lhs rhs =
     case (lhs, rhs) of
         (NumVal a, NumVal b) -> pure $ NumVal (func a b)
         _ -> runtimeError $ "Operands must be numbers."
 
-evalComparison :: (Monad m) => (Double -> Double -> Bool) -> Value -> Value -> Interpreter m Value
+evalComparison :: (Double -> Double -> Bool) -> Value -> Value -> Interpreter Value
 evalComparison comparison lhs rhs =
     case (lhs, rhs) of
         (NumVal a, NumVal b) -> pure $ BoolVal (comparison a b)
         _ -> runtimeError $ "Operands must be numbers."
 
-evalEqual :: (Monad m) => (Bool -> Bool) -> Value -> Value -> Interpreter m Value
+evalEqual :: (Bool -> Bool) -> Value -> Value -> Interpreter Value
 evalEqual modifier lhs rhs =
     pure $ BoolVal $ modifier $ case (lhs, rhs) of
         (NilVal, NilVal) -> True
@@ -217,7 +280,7 @@ evalEqual modifier lhs rhs =
         (BoolVal a, BoolVal b) -> (a == b)
         _ -> False
 
-evalUnary :: (Monad m) => UnaryOp -> Expr -> Interpreter m Value
+evalUnary :: UnaryOp -> Expr -> Interpreter Value
 evalUnary op expr = do
     val <- eval expr
     case (op, val) of
@@ -226,7 +289,7 @@ evalUnary op expr = do
         (Show, v) -> pure $ StrVal (Value.toString v)
         (Negate, _) -> runtimeError $ "Operand must be a number."
 
-evalLiteral :: (Monad m) => LiteralValue -> Interpreter m Value
+evalLiteral :: LiteralValue -> Interpreter Value
 evalLiteral litval =
     case litval of
         LiteralString val -> pure $ StrVal val

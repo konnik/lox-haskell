@@ -181,8 +181,8 @@ parseError token msg = Parser $ \tokens ->
             , message = msg
             }
 
-_parseErrorAndContinue :: Token -> String -> Parser ()
-_parseErrorAndContinue token msg = Parser $ \tokens ->
+parseErrorAndContinue :: Token -> String -> Parser ()
+parseErrorAndContinue token msg = Parser $ \tokens ->
     ( tokens
     , [err]
     , Just ()
@@ -210,11 +210,47 @@ declaration = do
     if isEof
         then exitParser
         else do
-            isVar <- check VAR
             recoverParseError synchronize $ do
-                if isVar
-                    then varDeclaration
-                    else statement
+                choice
+                    [ (VAR, varDeclaration)
+                    , (FUN, funDeclaration)
+                    ]
+                    statement
+
+funDeclaration :: Parser Stmt
+funDeclaration = do
+    expect_ FUN "BUG: Expecting 'fun'."
+    functionStmt "function"
+
+functionStmt :: String -> Parser Stmt
+functionStmt kind = do
+    nameToken <- expect IDENTIFIER $ "Expect " ++ kind ++ " name."
+    expect_ LEFT_PAREN $ "Expect '(' after " ++ kind ++ " name."
+    params <- functionParams
+    expect_ RIGHT_PAREN "Expect ')' after parameter list."
+    block <- blockStatement
+    pure $ StmtFunctionDecl nameToken.lexeme params block
+
+functionParams :: Parser [String]
+functionParams = do
+    noParams <- check RIGHT_PAREN
+    if noParams
+        then pure []
+        else loop []
+  where
+    loop :: [String] -> Parser [String]
+    loop params = do
+        if length params >= 255
+            then do
+                t <- peek
+                parseErrorAndContinue t "Can't have more than 255 parameters."
+            else pure ()
+
+        param <- expect IDENTIFIER "Expect identifier"
+        moreParams <- match COMMA
+        if moreParams
+            then loop (params ++ [param.lexeme])
+            else pure (params ++ [param.lexeme])
 
 exitParser :: Parser a
 exitParser = Parser $ \tokens ->
@@ -272,9 +308,17 @@ statement = do
         , (WHILE, whileStatement)
         , (FOR, forStatement)
         , (PRINT, printStatement)
-        , (LEFT_BRACE, blockStatement)
+        , (RETURN, returnStatement)
+        , (LEFT_BRACE, StmtBlock <$> blockStatement)
         ]
         expressionStatement
+
+returnStatement :: Parser Stmt
+returnStatement = do
+    token <- expect RETURN "BUG: expect 'return'"
+    expr <- expression
+    expect_ SEMICOLON "Expect ';' after return value."
+    pure $ StmtReturn token.line expr
 
 forStatement :: Parser Stmt
 forStatement = do
@@ -348,10 +392,10 @@ ifStatement = do
         ]
         $ pure (StmtIf condExpr thenStmt Nothing)
 
-blockStatement :: Parser Stmt
+blockStatement :: Parser [Stmt]
 blockStatement = expect_ LEFT_BRACE "expect begin block" >> zeroOrMoreStmts []
   where
-    zeroOrMoreStmts :: [Stmt] -> Parser Stmt
+    zeroOrMoreStmts :: [Stmt] -> Parser [Stmt]
     zeroOrMoreStmts stmts = do
         endOfBlock <- check RIGHT_BRACE
         if not endOfBlock
@@ -360,7 +404,7 @@ blockStatement = expect_ LEFT_BRACE "expect begin block" >> zeroOrMoreStmts []
                 zeroOrMoreStmts (stmts ++ [innerStmt])
             else do
                 skip
-                pure $ StmtBlock stmts
+                pure $ stmts
 
 printStatement :: Parser Stmt
 printStatement = do
@@ -466,7 +510,47 @@ unary = do
         , (MINUS, Unary Negate <$> unary)
         , (SHOW, Unary Show <$> unary)
         ]
-        primary
+        call
+
+call :: Parser Expr
+call = do
+    callee <- primary
+    isCall <- check LEFT_PAREN
+    if isCall
+        then loop callee
+        else pure callee
+  where
+    loop :: Expr -> Parser Expr
+    loop callee = do
+        skip
+        args <- arguments
+        closingParen <- expect RIGHT_PAREN "Expect ')' after argument list."
+        let callExpr = Call closingParen.line callee args
+        isCall <- check LEFT_PAREN
+        if isCall
+            then loop callExpr
+            else pure callExpr
+
+arguments :: Parser [Expr]
+arguments = do
+    done <- check RIGHT_PAREN
+    if done
+        then pure []
+        else loop []
+  where
+    loop :: [Expr] -> Parser [Expr]
+    loop params = do
+        token <- peek
+        argExpr <- expression
+
+        if length params >= 255
+            then parseErrorAndContinue token "Can't have more than 255 arguments."
+            else pure ()
+
+        moreArgs <- match COMMA
+        if moreArgs
+            then loop (params ++ [argExpr])
+            else pure $ (params ++ [argExpr])
 
 primary :: Parser Expr
 primary = do

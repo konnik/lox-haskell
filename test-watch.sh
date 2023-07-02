@@ -1,2 +1,2 @@
 #!/bin/bash
-find app/* crafting-interpreters.cabal | entr -c ./test.sh
+find app/* test.sh crafting-interpreters.cabal | entr -c ./test.sh

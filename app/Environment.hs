@@ -14,22 +14,21 @@ import Data.Map (Map)
 import Data.Map qualified
 
 import Data.Maybe (fromJust)
-import Value (Value, toString)
 
-data Environment = Environment
-    { variables :: Map String Value
-    , parent :: Maybe Environment
+data Environment a = Environment
+    { variables :: Map String a
+    , parent :: Maybe (Environment a)
     }
     deriving (Show)
 
-declareVar :: String -> Value -> Environment -> Environment
+declareVar :: String -> a -> Environment a -> Environment a
 declareVar name val env =
     env
         { variables =
             Data.Map.insert name val env.variables
         }
 
-getVar :: String -> Environment -> Either String Value
+getVar :: String -> Environment a -> Either String a
 getVar name env =
     case Data.Map.lookup name env.variables of
         Just val -> Right val
@@ -39,7 +38,7 @@ getVar name env =
             Nothing ->
                 Left $ "Undefined variable '" ++ name ++ "'."
 
-setVar :: String -> Value -> Environment -> Either String Environment
+setVar :: String -> a -> Environment a -> Either String (Environment a)
 setVar name val env =
     if Data.Map.member name env.variables
         then pure $ env{variables = Data.Map.insert name val env.variables}
@@ -50,25 +49,25 @@ setVar name val env =
             Nothing ->
                 Left $ "Undefined variable '" ++ name ++ "'."
 
-enterBlock :: Environment -> Environment
+enterBlock :: Environment a -> Environment a
 enterBlock parent = newEnvironment{parent = Just parent}
 
-leaveBlock :: Environment -> Environment
+leaveBlock :: Environment a -> Environment a
 leaveBlock env = fromJust env.parent
 
-newEnvironment :: Environment
+newEnvironment :: Environment a
 newEnvironment =
     Environment
         { variables = Data.Map.empty
         , parent = Nothing
         }
 
-printEnv :: Environment -> IO ()
+printEnv :: (Show a) => Environment a -> IO ()
 printEnv currEnv = do
     go 1 currEnv
     putStrLn "--- End ---"
   where
-    go :: Int -> Environment -> IO ()
+    go :: (Show a) => Int -> Environment a -> IO ()
     go n env = do
         putStrLn $ "--- Frame " ++ show n ++ " ---"
         mapM_ printVar $ Data.Map.toList env.variables
@@ -76,5 +75,5 @@ printEnv currEnv = do
             Just parent -> go (n + 1) parent
             Nothing -> pure ()
 
-    printVar :: (String, Value) -> IO ()
-    printVar (name, value) = putStrLn $ mconcat [name, ": ", replicate (10 - length name) ' ', Value.toString value]
+    printVar :: (Show a) => (String, a) -> IO ()
+    printVar (name, value) = putStrLn $ mconcat [name, ": ", replicate (10 - length name) ' ', show value]
