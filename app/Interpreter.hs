@@ -9,7 +9,7 @@ import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (catchE, finallyE, runExceptT, throwE)
 import Control.Monad.Trans.Reader (ReaderT (runReaderT), ask, local)
-import Control.Monad.Trans.State (get, gets, modify, put, runStateT)
+import Control.Monad.Trans.State (get, gets, modify, modifyM, put, runStateT)
 import Data.Function ((&))
 import GHC.IO.Exception (ExitCode (ExitFailure))
 import Native qualified
@@ -18,6 +18,7 @@ import System.IO (hPutStrLn, stderr)
 
 import Control.Monad (when)
 import Data.IORef (IORef, newIORef, writeIORef)
+import Data.Sequence.Internal.Sorting (QList (Nil))
 import Environment (Environment)
 import GHC.IORef (readIORef)
 import Types (Error (..))
@@ -27,10 +28,10 @@ type Interpreter a = Types.Interpreter Value a
 
 run :: Bool -> [Stmt] -> IO ()
 run _debug stmts = do
-    let initialEnvironment =
-            Environment.newEnvironment
-                & Environment.declareVar "clock" Native.clock
-                & Environment.declareVar "readStr" Native.readStr
+    initialEnvironment <-
+        pure Environment.newEnvironment
+            >>= Environment.declareVar "clock" Native.clock
+            >>= Environment.declareVar "readStr" Native.readStr
 
     (result, _env) <- runStateT (runExceptT (runReaderT (runStatements stmts) 1)) initialEnvironment
     case result of
@@ -111,46 +112,61 @@ runInNewEnvironment action = do
         lift $ modify Environment.leaveBlock
     pure result
 
-runWithClosure :: IORef (Environment Value) -> Interpreter a -> Interpreter a
-runWithClosure ioRefClosure action = do
-    closure <- liftIO $ readIORef ioRefClosure
+runWithClosure :: Environment Value -> Interpreter a -> Interpreter a
+runWithClosure closure action = do
     line <- ask
-    currEnv <- lift $ lift get
+    currEnv <- getEnv
     lift $ lift $ put closure
     result <- lift $ finallyE (runReaderT action line) $ do
-        closure' <- lift $ get
-        liftIO $ writeIORef ioRefClosure closure'
         lift $ put currEnv
     pure result
 
-_setVar :: String -> Value -> Interpreter ()
-_setVar name value = do
-    env <- lift $ lift get
-    case Environment.setVar name value env of
-        Right env' -> lift $ lift $ put env'
+getVar :: String -> Interpreter Value
+getVar name = do
+    env <- getEnv
+    result <- Environment.getVar name env
+    case result of
+        Right value -> lift $ lift $ pure value
+        Left err -> runtimeError err
+
+setVar :: String -> Value -> Interpreter ()
+setVar name value = do
+    env <- getEnv
+    result <- Environment.setVar name value env
+    case result of
+        Right () -> lift $ lift $ pure ()
         Left err -> runtimeError err
 
 declareVar :: String -> Value -> Interpreter ()
 declareVar name value = do
-    env <- lift $ lift get
-    let env' = Environment.declareVar name value env
-    lift $ lift $ put env'
+    env <- getEnv
+    env' <- Environment.declareVar name value env
+    setEnv env'
+
+getEnv :: Interpreter (Environment Value)
+getEnv = lift $ lift $ get
+
+setEnv :: Environment Value -> Interpreter ()
+setEnv env = lift $ lift $ put env
 
 runFunctionDeclStmt :: String -> [String] -> [Stmt] -> Interpreter ()
 runFunctionDeclStmt name params block = do
-    currEnv <- lift $ lift get
-    ioRefClosure <- liftIO $ newIORef currEnv
-    let callable = CallableVal (length params) Value.UserDefined name $ \args -> handleReturn $ runWithClosure ioRefClosure $ do
-            sequence_ $ zipWith declareVar params args
-            runStatements block
-            pure NilVal
+    -- declare temporary function variable so the function is
+    -- declared in the closure (to support recursion)
+    declareVar name NilVal
+    closure <- getEnv
+    let callable = CallableVal (length params) Value.UserDefined name $ \args -> do
+            handleReturn $ runWithClosure closure $ runInNewEnvironment $ do
+                sequence_ $ zipWith declareVar params args
+                runStatements block
+                pure NilVal
 
-    lift $ lift $ modify $ Environment.declareVar name callable
+    setVar name callable
 
 runVarDeclStmt :: String -> Expr -> Interpreter ()
 runVarDeclStmt name initExpr = do
     value <- eval initExpr
-    lift $ lift $ modify $ Environment.declareVar name value
+    lift $ lift $ modifyM $ Environment.declareVar name value
 
 runPrintStmt :: Expr -> Interpreter ()
 runPrintStmt expr = do
@@ -203,7 +219,7 @@ evalCall calleeExpr arguments = do
 
 debugPrintEnv :: Interpreter ()
 debugPrintEnv = do
-    env <- lift $ lift get
+    env <- getEnv
     liftIO $ Environment.printEnv env
 
 handleReturn :: Interpreter Value -> Interpreter Value
@@ -231,19 +247,11 @@ evalLogic op lhs rhs =
 evalAssignment :: String -> Expr -> Interpreter Value
 evalAssignment name expr = do
     value <- eval expr
-    env <- lift $ lift get
-    case Environment.setVar name value env of
-        Left err -> runtimeError err
-        Right env' -> do
-            lift $ lift $ put env'
-            pure $ value
+    setVar name value
+    pure $ value
 
 evalVariable :: String -> Interpreter Value
-evalVariable name = do
-    result <- lift $ lift $ gets $ Environment.getVar name
-    case result of
-        Right val -> pure val
-        Left err -> runtimeError err
+evalVariable name = getVar name
 
 evalBinary :: BinaryOp -> Expr -> Expr -> Interpreter Value
 evalBinary op lhs rhs = do

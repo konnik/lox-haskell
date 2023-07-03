@@ -1,13 +1,8 @@
-fun makeCounter() {
-  var i = 0;
-  fun count() {
-    i = i + 1;
-    print i;
+
+  fun fib(n) {
+    if (n < 2) return n;
+    return fib(n - 1) + fib(n - 2);
   }
 
-  return count;
-}
+  print fib(8); // expect: 21
 
-var counter = makeCounter();
-counter(); // "1".
-counter(); // "2".

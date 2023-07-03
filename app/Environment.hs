@@ -13,41 +13,47 @@ where
 import Data.Map (Map)
 import Data.Map qualified
 
+import Control.Monad.IO.Class (MonadIO (liftIO))
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (fromJust)
 
 data Environment a = Environment
-    { variables :: Map String a
+    { variables :: Map String (IORef a)
     , parent :: Maybe (Environment a)
     }
-    deriving (Show)
 
-declareVar :: String -> a -> Environment a -> Environment a
-declareVar name val env =
-    env
-        { variables =
-            Data.Map.insert name val env.variables
-        }
+declareVar :: (MonadIO m) => String -> a -> Environment a -> m (Environment a)
+declareVar name val env = do
+    ioRefValue <- liftIO $ newIORef val
+    pure
+        env
+            { variables =
+                Data.Map.insert name ioRefValue env.variables
+            }
 
-getVar :: String -> Environment a -> Either String a
+getVar :: (MonadIO m) => String -> Environment a -> m (Either String a)
 getVar name env =
     case Data.Map.lookup name env.variables of
-        Just val -> Right val
+        Just val -> do
+            val' <- liftIO $ readIORef val
+            pure $ Right val'
         Nothing -> case env.parent of
             Just parent ->
                 getVar name parent
             Nothing ->
-                Left $ "Undefined variable '" ++ name ++ "'."
+                pure $ Left $ "Undefined variable '" ++ name ++ "'."
 
-setVar :: String -> a -> Environment a -> Either String (Environment a)
+setVar :: (MonadIO m) => String -> a -> Environment a -> m (Either String ())
 setVar name val env =
-    if Data.Map.member name env.variables
-        then pure $ env{variables = Data.Map.insert name val env.variables}
-        else case env.parent of
+    case Data.Map.lookup name env.variables of
+        Just ref -> do
+            liftIO $ writeIORef ref val
+            pure $ pure ()
+        Nothing -> case env.parent of
             Just parent -> do
-                parent' <- setVar name val parent
-                pure $ env{parent = Just parent'}
+                setVar name val parent
             Nothing ->
-                Left $ "Undefined variable '" ++ name ++ "'."
+                pure $ Left $ "Undefined variable '" ++ name ++ "'."
 
 enterBlock :: Environment a -> Environment a
 enterBlock parent = newEnvironment{parent = Just parent}
@@ -75,5 +81,7 @@ printEnv currEnv = do
             Just parent -> go (n + 1) parent
             Nothing -> pure ()
 
-    printVar :: (Show a) => (String, a) -> IO ()
-    printVar (name, value) = putStrLn $ mconcat [name, ": ", replicate (10 - length name) ' ', show value]
+    printVar :: (Show a) => (String, IORef a) -> IO ()
+    printVar (name, ref) = do
+        value <- readIORef ref
+        putStrLn $ mconcat [name, ": ", replicate (10 - length name) ' ', show value]
