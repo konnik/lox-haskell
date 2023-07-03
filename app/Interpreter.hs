@@ -26,7 +26,7 @@ import Types qualified
 
 type Interpreter a = Types.Interpreter Value a
 
-run :: Bool -> [Stmt] -> IO ()
+run :: Bool -> [Stmt] -> IO Bool
 run _debug stmts = do
     initialEnvironment <-
         pure Environment.newEnvironment
@@ -35,10 +35,10 @@ run _debug stmts = do
 
     (result, _env) <- runStateT (runExceptT (runReaderT (runStatements stmts) 1)) initialEnvironment
     case result of
-        Right _ -> pure ()
+        Right _ -> pure False
         Left err -> do
             reportError err
-            exitWith $ ExitFailure 70
+            pure True
 
 reportError :: Error Value -> IO ()
 reportError err = do

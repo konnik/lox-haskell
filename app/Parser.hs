@@ -528,7 +528,7 @@ call = do
     loop callee = do
         skip
         args <- arguments
-        closingParen <- expect RIGHT_PAREN "Expect ')' after argument list."
+        closingParen <- expect RIGHT_PAREN "Expect ')' after arguments."
         let callExpr = Call closingParen.line callee args
         isCall <- check LEFT_PAREN
         if isCall

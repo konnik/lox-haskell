@@ -1,7 +1,8 @@
 #!/bin/bash
 
+#TESTTAG=chap09_control
 TESTTAG=chap10_functions
-#chap09_control
+#
 
 
 # chap05_representing

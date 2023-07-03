@@ -1,6 +1,7 @@
 module Main where
 
 import Ast (Stmt)
+import GHC.Base (when)
 import Interpreter qualified
 import Parser qualified
 import Result
@@ -22,38 +23,39 @@ runPrompt :: IO ()
 runPrompt = do
     putStr "hlox> " >> hFlush stdout
     input <- getLine
-    run (pure ()) input
+    _ <- run input
     runPrompt
 
 runFile :: String -> IO ()
 runFile fileName = do
     fileContent <- readFile fileName
-    run (exitWith $ ExitFailure 65) fileContent
+    (hadErrors, hadRuntimeErrors) <- run fileContent
 
-run :: IO () -> String -> IO ()
-run onError source = do
+    when hadErrors $ exitWith $ ExitFailure 65
+    when hadRuntimeErrors $ exitWith $ ExitFailure 70
+
+run :: String -> IO (Bool, Bool)
+run source = do
     -- putStrLn $ "Input: "
     -- putStrLn source
     -- putStrLn ""
+    let (scanErrors, tokens) = scanTokens source
+    mapM_ reportError scanErrors
+    -- putStrLn "Tokens: "
+    -- reportTokens tokens
+    case Parser.parse tokens of
+        Left parseErrors -> do
+            mapM_ reportError parseErrors
+            pure (True, False)
+        Right program -> do
+            -- putStrLn "Parsed statements: "
+            -- reportStatements program
+            -- putStrLn ""
+            -- putStrLn "Program output:"
+            hadRuntimeErrors <- Interpreter.run False program
+            pure (not (null scanErrors), hadRuntimeErrors)
 
-    case scanTokens source of
-        Right tokens -> do
-            -- putStrLn "Tokens: "
-            -- reportTokens tokens
-            case Parser.parse tokens of
-                Left errors -> do
-                    mapM_ reportError errors
-                    onError
-                Right program -> do
-                    -- putStrLn "Parsed statements: "
-                    -- reportStatements program
-                    -- putStrLn ""
-                    -- putStrLn "Program output:"
-                    Interpreter.run False program
-        -- putStrLn "Done."
-        Left err -> do
-            reportError err
-            onError
+-- putStrLn "Done."
 
 reportTokens :: [Token] -> IO ()
 reportTokens tokens = do

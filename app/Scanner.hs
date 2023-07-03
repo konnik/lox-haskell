@@ -6,22 +6,30 @@ import Data.Map qualified as Map
 import Result
 import Token
 
-scanTokens :: String -> Result [Token]
-scanTokens source =
-    scanTokens' $ Scanner source 1
+type Result = Either (Error, Scanner) (Token, Scanner)
 
-scanTokens' :: Scanner -> Result [Token]
-scanTokens' s =
+okResult :: (Token, Scanner) -> Result
+okResult value = Right value
+
+errorResult :: Int -> String -> Scanner -> Result
+errorResult line message s = Left $ (Error line "" message, s)
+
+scanTokens :: String -> ([Error], [Token])
+scanTokens source =
+    scanTokens' [] [] $ Scanner source 1
+
+scanTokens' :: [Error] -> [Token] -> Scanner -> ([Error], [Token])
+scanTokens' errors tokens s =
     case nextToken s of
         Right (t, s') ->
             if t.type_ == EOF
-                then okResult [t]
-                else fmap ((:) t) $ scanTokens' s'
-        Left err -> Left err
+                then (errors, tokens ++ [t])
+                else scanTokens' errors (tokens ++ [t]) s'
+        Left (err, s') -> scanTokens' (errors ++ [err]) tokens s'
 
 data Scanner = Scanner {source :: String, line :: Int}
 
-nextToken :: Scanner -> Result (Token, Scanner)
+nextToken :: Scanner -> Result
 nextToken s =
     case s.source of
         "" -> emit EOF 0
@@ -63,9 +71,9 @@ nextToken s =
         x : _ ->
             if isAlphaUnderscore x
                 then identifier
-                else errorResult s.line ("Unexpected character.")
+                else errorResult s.line ("Unexpected character.") (skip 1)
   where
-    identifier :: Result (Token, Scanner)
+    identifier :: Result
     identifier =
         let
             word = takeWhile isAlpahNumUnderscore s.source
@@ -94,7 +102,7 @@ nextToken s =
                 Just typ -> emit typ (length word)
                 Nothing -> emit IDENTIFIER (length word)
 
-    digit :: Result (Token, Scanner)
+    digit :: Result
     digit =
         let
             digits = takeWhile isDigit s.source
@@ -102,16 +110,16 @@ nextToken s =
          in
             case rest of
                 [] -> emitNumber digits
-                '.' : [] -> errorResult s.line "Missing digits after decimal point."
+                '.' : [] -> emitNumber digits
                 '.' : x : rest2 ->
                     if not (isDigit x)
-                        then errorResult s.line "Expected digit after decimal point."
+                        then emitNumber digits
                         else
                             let digits2 = x : takeWhile isDigit rest2
                              in emitNumber (digits ++ "." ++ digits2)
                 _ -> emitNumber digits
 
-    emitNumber :: String -> Result (Token, Scanner)
+    emitNumber :: String -> Result
     emitNumber str =
         okResult $
             ( Token
@@ -124,16 +132,16 @@ nextToken s =
                 }
             )
 
-    string :: Result (Token, Scanner)
+    string :: Result
     string =
         let
             str = takeWhile ((/=) '"') (drop 1 s.source)
          in
             if length str >= (length s.source - 1)
-                then errorResult s.line "Unterminated string."
+                then errorResult s.line "Unterminated string." (skip (length s.source))
                 else emitString str
 
-    emitString :: String -> Result (Token, Scanner)
+    emitString :: String -> Result
     emitString str =
         let
             newlines = length $ filter ((==) '\n') str
@@ -158,7 +166,10 @@ nextToken s =
     skipWs :: Scanner
     skipWs = s{source = drop 1 s.source}
 
-    emit :: TokenType -> Int -> Result (Token, Scanner)
+    skip :: Int -> Scanner
+    skip n = s{source = drop n s.source}
+
+    emit :: TokenType -> Int -> Result
     emit toktyp n =
         okResult
             ( Token
