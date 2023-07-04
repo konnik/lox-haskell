@@ -1,0 +1,34 @@
+// Mandelbrot set in Lox
+var xmin = -1.7;
+var xmax = 0.5;
+var ymin = -1;
+var ymax = 1;
+
+var aspect = 2.5;
+var columns = 330;
+var rows = columns * (ymax - ymin) / (xmax - xmin);
+var dx = (xmax - xmin) / columns;
+var dy = aspect*(ymax - ymin) / rows;
+var maxiter = 100;
+
+fun mandelbrot(cx,cy) {
+  fun loop(n,zx,zy) {
+    if (n >= maxiter) {
+      return "*";
+    } else if (zx*zx + zy*zy > 4) {
+      return ".";
+    } else {
+      return loop(n+1, (zx * zx - zy * zy) + cx, 2 * zx * zy + cy);
+    }
+  }
+  return loop(0, 0, 0);
+}
+
+for (var y=ymin; y<ymax; y=y+dy) {
+  var chars = "";
+  for (var x=xmin; x<xmax; x=x+dx) {
+    chars = chars + mandelbrot(x, y);
+  }
+  print chars;
+}
+
