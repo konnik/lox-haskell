@@ -29,7 +29,7 @@ type Interpreter a = Types.Interpreter Value a
 run :: Bool -> [Stmt] -> IO Bool
 run _debug stmts = do
     initialEnvironment <-
-        pure Environment.newEnvironment
+        Environment.newEnvironment
             >>= Environment.declareVar "clock" Native.clock
             >>= Environment.declareVar "readStr" Native.readStr
 
