@@ -20,8 +20,10 @@ executable hlox
     Value
 
   build-depends:
-    , base          ^>=4.18.0.0
+    , base           ^>=4.18.0.0
     , containers
+    , process
+    , terminal-size
     , time
     , transformers
 

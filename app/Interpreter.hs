@@ -32,6 +32,9 @@ run _debug stmts = do
         Environment.newEnvironment
             >>= Environment.declareVar "clock" Native.clock
             >>= Environment.declareVar "readStr" Native.readStr
+            >>= Environment.declareVar "termWidth" Native.termWidth
+            >>= Environment.declareVar "termHeight" Native.termHeight
+            >>= Environment.declareVar "cls" Native.cls
 
     (result, _env) <- runStateT (runExceptT (runReaderT (runStatements stmts) 1)) initialEnvironment
     case result of

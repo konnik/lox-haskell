@@ -1,34 +1,76 @@
+
 // Mandelbrot set in Lox
-var xmin = -1.7;
-var xmax = 0.5;
-var ymin = -1;
-var ymax = 1;
+cls();
+var columns = termWidth();
+var rows = termHeight()-1;
+
+var centerX = -0.6;
+var centerY = 0;
+var viewWidth = 2.2;
 
 var aspect = 2.5;
-var columns = 330;
-var rows = columns * (ymax - ymin) / (xmax - xmin);
-var dx = (xmax - xmin) / columns;
-var dy = aspect*(ymax - ymin) / rows;
-var maxiter = 100;
+var dx = 2.2 / columns;
+var dy = dx * aspect;
+
+var maxiter = 30;
+var grayscale = " .:-=+*#%@";
 
 fun mandelbrot(cx,cy) {
-  fun loop(n,zx,zy) {
-    if (n >= maxiter) {
-      return "*";
-    } else if (zx*zx + zy*zy > 4) {
-      return ".";
+    var n = 0;
+    var zx = 0;
+    var zy = 0;
+    var zx2 = 0;
+    var zy2 = 0;
+    while (n<maxiter) {
+        zx2 =  zx * zx - zy * zy + cx;
+        zy2 =  2 * zx * zy + cy;
+        zx = zx2;
+        zy = zy2;
+        
+        if (zx*zx + zy*zy > 4) {
+            return color(n);
+        }
+        n = n + 1;
+    } 
+    
+    return " ";
+}
+
+fun color(n) {
+    // " .:-=+*#%@"
+    var d = n/maxiter;
+    if (d<0.1) {
+        return ".";
+    } else if (d<0.2) {
+        return ":";
+    } else if (d<0.3) {
+        return "-";
+    } else if (d<0.4) {
+        return "=";
+    } else if (d<0.5) {
+        return "+";
+    } else if (d<0.6) {
+        return "*";
+    } else if (d<0.7) {
+        return "#";
+    } else if (d<0.8) {
+        return "%";
+    } else if (d<0.9) {
+        return "@";
     } else {
-      return loop(n+1, (zx * zx - zy * zy) + cx, 2 * zx * zy + cy);
+        return "@";
     }
-  }
-  return loop(0, 0, 0);
+
 }
 
-for (var y=ymin; y<ymax; y=y+dy) {
-  var chars = "";
-  for (var x=xmin; x<xmax; x=x+dx) {
-    chars = chars + mandelbrot(x, y);
-  }
-  print chars;
+for (var row=0; row<rows; row=row+1) {
+    var y=centerY+dy*(row-rows/2);
+    var chars = "";
+    for (var col=0; col<columns; col=col+1) {
+        var x=centerX+dx*(col-columns/2);
+        chars = chars + mandelbrot(x, y);
+    }
+    print chars;
 }
 
+readStr();
