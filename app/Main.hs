@@ -16,7 +16,7 @@ main = do
     args <- getArgs
     case args of
         [] -> runPrompt
-        [fileName] -> runFile (fileName)
+        [fileName] -> runFile fileName
         _ -> putStrLn "Usage: hlox <filename>"
 
 runPrompt :: IO ()
@@ -30,7 +30,6 @@ runFile :: String -> IO ()
 runFile fileName = do
     fileContent <- readFile fileName
     (hadErrors, hadRuntimeErrors) <- run fileContent
-
     when hadErrors $ exitWith $ ExitFailure 65
     when hadRuntimeErrors $ exitWith $ ExitFailure 70
 

@@ -1,12 +1,16 @@
-fun isEven(n) {
-  if (n == 0) return true;
-  return isOdd(n - 1);
-}
 
-fun isOdd(n) {
-  if (n == 0) return false;
-  return isEven(n - 1);
-}
 
-print isEven(4); // expect: true
-print isOdd(3); // expect: true
+var xloops = 15;
+var yloops = 1000;
+
+var t1; 
+var t2; 
+for (var x=0; x<xloops; x=x+1) {
+  t1 = clock();
+  for (var y=0; y<yloops; y=y+1) {
+    // x + y + 1;
+    var korv = "korv " + show y + ", " + show x;
+  }
+  t2 = clock();
+  print show x + " = " + show (t2-t1);
+}
