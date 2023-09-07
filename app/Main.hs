@@ -1,7 +1,7 @@
 module Main where
 
 import Ast (Stmt)
-import GHC.Base (when)
+import Control.Monad (when)
 import Interpreter qualified
 import Parser qualified
 import Result
